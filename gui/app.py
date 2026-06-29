@@ -60,22 +60,26 @@ class _QueueLogHandler(logging.Handler):
 
 def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     """Route logging to the GUI history queue and a timestamped run log file."""
-    formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s — %(message)s", datefmt="%H:%M:%S"
-    )
-
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
+    # GUI history: terse "time [level] message" – no module name.
     gui_handler = _QueueLogHandler(event_queue)
-    gui_handler.setFormatter(formatter)
+    gui_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+    )
     root_logger.addHandler(gui_handler)
 
+    # Run log file: keep the module name for debugging.
     stamp = datetime.now(tz=ZoneInfo("Europe/Copenhagen")).strftime("%Y%m%d_%H%M%S")
     file_handler = logging.FileHandler(
         config.get_log_dir() / f"run_{stamp}.log", encoding="utf-8"
     )
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s — %(message)s", datefmt="%H:%M:%S"
+        )
+    )
     root_logger.addHandler(file_handler)
 
 
@@ -217,8 +221,21 @@ class DataaftalerApp:
 
     def _full_run_worker(self) -> None:
         try:
-            ats = AutomationServer.from_environment()
-            workqueue = ats.workqueue()
+            missing = config.missing_ats_env()
+            if missing:
+                raise ValueError(
+                    "Automation Server er ikke konfigureret. Følgende mangler i "
+                    f".env: {', '.join(missing)}. Udfyld dem og start igen."
+                )
+            try:
+                ats = AutomationServer.from_environment()
+                workqueue = ats.workqueue()
+            except Exception as e:
+                raise ValueError(
+                    "Kunne ikke oprette forbindelse til Automation Server. "
+                    "Tjek ATS_URL, ATS_TOKEN og ATS_WORKQUEUE_OVERRIDE i .env. "
+                    f"(Teknisk: {e})"
+                ) from e
 
             asyncio.run(populate_queue(workqueue, self.reporter))
             asyncio.run(process_workqueue(workqueue, self.reporter))

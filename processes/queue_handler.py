@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Columns the reviewed overview must still contain for the queue to be built.
+# The caseworker edits the sheet by hand, so a deleted/renamed column is a real
+# risk – we validate up front and tell them exactly what is missing.
+REQUIRED_COLUMNS = ("Instregnr", "status", "statusændring", "systemNavn", "serviceNavn")
+
 
 def clean_instregnr(instregnr) -> str:
     """Remove any decimal point and trailing digits from an Instregnr value."""
@@ -56,7 +61,11 @@ def retrieve_items_for_queue() -> list[dict]:
     """Read the single ``*Oversigt*.xlsx`` in Output/ and build queue items.
 
     Only rows whose ``statusændring`` requests a change to a *different* status
-    are included. Raises ``ValueError`` if there is not exactly one overview file.
+    are included.
+
+    Raises ``ValueError`` with a user-facing Danish message if there is not
+    exactly one overview file, the file cannot be read (e.g. it is still open in
+    Excel), or a required column has been deleted/renamed.
     """
     output_dir = config.get_output_dir()
     # Case-insensitive match: the file is written lowercase ("...oversigt...") but
@@ -73,7 +82,25 @@ def retrieve_items_for_queue() -> list[dict]:
             f"Slet gamle filer. Filer fundet: {names or '(ingen)'}"
         )
 
-    df = pd.read_excel(excel_files[0])
+    excel_path = excel_files[0]
+    filename = os.path.basename(excel_path)
+    try:
+        df = pd.read_excel(excel_path)
+    except Exception as e:
+        raise ValueError(
+            f"Kunne ikke læse regnearket '{filename}'. "
+            "Er filen stadig åben i Excel? Luk den og prøv igen."
+        ) from e
+
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Regnearket '{filename}' mangler nødvendige kolonner: "
+            f"{', '.join(missing)}. Disse kolonner må ikke slettes eller omdøbes. "
+            "Dan overblikket igen, eller gendan kolonnerne, og prøv igen. "
+            f"(Kolonner fundet: {', '.join(map(str, df.columns))})"
+        )
+
     df["Instregnr"] = df["Instregnr"].apply(clean_instregnr)
 
     items: list[dict] = []

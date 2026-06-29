@@ -104,6 +104,7 @@ def open_stil_connection() -> webdriver.Chrome:
     browser.maximize_window()
     browser.get(config.STIL_LOGIN_URL)
 
+    # Load the STIL login page and pre-select the Aarhus Kommune Lokal IdP.
     try:
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "LoginMenuItem_2"))
@@ -115,17 +116,29 @@ def open_stil_connection() -> webdriver.Chrome:
 
         browser.find_element(By.ID, "ddlLocalIdPOrganization-input").click()
         browser.find_element(By.ID, "btnSubmit").click()
+    except (TimeoutException, NoSuchElementException) as e:
+        logger.exception("STIL-loginsiden kunne ikke indlæses")
+        browser.quit()
+        raise TimeoutError(
+            "STIL-loginsiden kunne ikke indlæses. Tjek din internetforbindelse "
+            "og at STIL er tilgængelig, og prøv igen."
+        ) from e
 
-        logger.info("Venter på at brugeren logger ind...")
+    # Wait for the user to complete the manual MitID login.
+    logger.info("Venter på at brugeren logger ind...")
+    try:
         WebDriverWait(browser, config.LOGIN_USER_TIMEOUT).until(
             EC.element_to_be_clickable((By.ID, "organisation-search"))
         )
-        logger.info("Login gennemført. Fortsætter...")
-
-    except (TimeoutException, NoSuchElementException):
-        logger.exception("Fejl under login")
+    except TimeoutException as e:
+        minutes = config.LOGIN_USER_TIMEOUT // 60
+        logger.exception("Login blev ikke gennemført i tide")
         browser.quit()
-        raise
+        raise TimeoutError(
+            f"Login blev ikke gennemført inden for {minutes} minutter. "
+            "Prøv igen, og log ind i STIL når browseren åbner."
+        ) from e
+    logger.info("Login gennemført. Fortsætter...")
 
     return browser
 
