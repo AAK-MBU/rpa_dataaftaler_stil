@@ -1,7 +1,7 @@
 [project]
-name = "process-template"
-version = "0.0.0"
-description = "Add your description here"
+name = "rpa-dataaftaler-stil"
+version = "0.1.0"
+description = "Desktop RPA-løsning til at danne overblik over og opdatere dataaftaler i STIL, bygget på ATS-frameworket med et Tkinter-feedbackvindue."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -9,7 +9,12 @@ dependencies = [
     "mbu-dev-shared-components>=3.0.0",
     "mbu-rpa-core",
     "pillow",
-    "ruff"
+    "ruff",
+    "selenium>=4.23",
+    "pandas",
+    "openpyxl",
+    "requests",
+    "python-dotenv",
 ]
 
 [tool.uv.sources]
