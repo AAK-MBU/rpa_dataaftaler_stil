@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Columns the reviewed overview must still contain for the queue to be built.
+# The caseworker edits the sheet by hand, so a deleted/renamed column is a real
+# risk – we validate up front and tell them exactly what is missing.
+REQUIRED_COLUMNS = ("Instregnr", "status", "statusændring", "systemNavn", "serviceNavn")
+
 
 def clean_instregnr(instregnr) -> str:
     """Remove any decimal point and trailing digits from an Instregnr value."""
@@ -46,7 +51,7 @@ def _dedupe_references(items: list[dict]) -> list[dict]:
         if ref in seen:
             seen[ref] += 1
             item["reference"] = f"{ref}_{seen[ref]}"
-            logger.info("Duplicate reference found, renamed to %s", item["reference"])
+            logger.info("Dublet-reference fundet, omdøbt til %s", item["reference"])
         else:
             seen[ref] = 0
     return items
@@ -56,7 +61,11 @@ def retrieve_items_for_queue() -> list[dict]:
     """Read the single ``*Oversigt*.xlsx`` in Output/ and build queue items.
 
     Only rows whose ``statusændring`` requests a change to a *different* status
-    are included. Raises ``ValueError`` if there is not exactly one overview file.
+    are included.
+
+    Raises ``ValueError`` with a user-facing Danish message if there is not
+    exactly one overview file, the file cannot be read (e.g. it is still open in
+    Excel), or a required column has been deleted/renamed.
     """
     output_dir = config.get_output_dir()
     # Case-insensitive match: the file is written lowercase ("...oversigt...") but
@@ -69,11 +78,31 @@ def retrieve_items_for_queue() -> list[dict]:
     if len(excel_files) != 1:
         names = ", ".join(os.path.basename(f) for f in excel_files)
         raise ValueError(
-            "Der skal være præcis ét Oversigt-regneark i Output-mappen. "
-            f"Slet gamle filer. Filer fundet: {names or '(ingen)'}"
+            "Der skal være præcis ét Oversigt-regneark i mappen "
+            f"'{output_dir}'. Det reviderede regneark skal ligge dér (det er også "
+            "hvor 'Dan overblik' gemmer det). Slet evt. gamle filer. "
+            f"Filer fundet: {names or '(ingen)'}"
         )
 
-    df = pd.read_excel(excel_files[0])
+    excel_path = excel_files[0]
+    filename = os.path.basename(excel_path)
+    try:
+        df = pd.read_excel(excel_path)
+    except Exception as e:
+        raise ValueError(
+            f"Kunne ikke læse regnearket '{filename}'. "
+            "Er filen stadig åben i Excel? Luk den og prøv igen."
+        ) from e
+
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Regnearket '{filename}' mangler nødvendige kolonner: "
+            f"{', '.join(missing)}. Disse kolonner må ikke slettes eller omdøbes. "
+            "Dan overblikket igen, eller gendan kolonnerne, og prøv igen. "
+            f"(Kolonner fundet: {', '.join(map(str, df.columns))})"
+        )
+
     df["Instregnr"] = df["Instregnr"].apply(clean_instregnr)
 
     items: list[dict] = []
@@ -93,7 +122,7 @@ def retrieve_items_for_queue() -> list[dict]:
             )
 
     items = _dedupe_references(items)
-    logger.info("Total changes: %d", len(items))
+    logger.info("Antal ændringer i alt: %d", len(items))
     return items
 
 
@@ -130,13 +159,13 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
             for attempt in range(1, config.MAX_RETRIES + 1):
                 try:
                     await asyncio.to_thread(workqueue.add_item, data, reference)
-                    logger.info("Added item to queue with reference: %s", reference)
+                    logger.info("Tilføjede element til køen med reference: %s", reference)
                     return True
 
                 except Exception as e:
                     if attempt >= config.MAX_RETRIES:
                         logger.error(
-                            "Failed to add item %s after %d attempts: %s",
+                            "Kunne ikke tilføje element %s efter %d forsøg: %s",
                             reference,
                             attempt,
                             e,
@@ -146,7 +175,8 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
                     backoff = config.RETRY_BASE_DELAY * (2 ** (attempt - 1))
 
                     logger.warning(
-                        "Error adding %s (attempt %d/%d). Retrying in %.2fs... %s",
+                        "Fejl ved tilføjelse af %s (forsøg %d/%d). "
+                        "Prøver igen om %.2fs... %s",
                         reference,
                         attempt,
                         config.MAX_RETRIES,
@@ -156,12 +186,13 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
                     await asyncio.sleep(backoff)
 
     if not items:
-        logger.info("No new items to add.")
+        logger.info("Ingen nye elementer at tilføje.")
         return
 
     sorted_items = sorted(items, key=create_sort_key)
     logger.info(
-        "Processing %d items sorted by complete JSON structure", len(sorted_items)
+        "Behandler %d elementer sorteret efter komplet JSON-struktur",
+        len(sorted_items),
     )
 
     results = await asyncio.gather(*(add_one(i) for i in sorted_items))
@@ -169,5 +200,8 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
     failures = len(results) - successes
 
     logger.info(
-        "Summary: %d succeeded, %d failed out of %d", successes, failures, len(results)
+        "Opsummering: %d lykkedes, %d fejlede ud af %d",
+        successes,
+        failures,
+        len(results),
     )

@@ -70,6 +70,6 @@ def finalize_process(
             summary[outcome] += 1
 
     message = format_summary_message(summary)
-    reporter.summary(summary)
+    reporter.summary(summary, message)
     reporter.log(message)
     return summary

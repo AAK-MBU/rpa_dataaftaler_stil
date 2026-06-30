@@ -12,12 +12,13 @@ the auth cookies and drive the rest of the flow through plain ``requests`` calls
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -27,6 +28,8 @@ from helpers.exceptions import ResponseError
 
 if TYPE_CHECKING:
     from requests import Response, Session
+
+    from helpers.reporting import ProgressReporter
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +95,14 @@ def switch_to_new_tab(browser: webdriver.Chrome) -> None:
         browser.switch_to.window(browser.window_handles[1])
 
 
-def open_stil_connection() -> webdriver.Chrome:
+def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.Chrome:
     """Open STIL in Chrome and wait for the user to complete the manual login.
 
     Returns the live Chrome webdriver once login has succeeded. Raises on timeout
     or missing elements (after closing the browser).
+
+    Once login is done the browser is minimised and ``reporter.focus()`` is called
+    so the GUI returns to the foreground while the automated work runs.
     """
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("log-level=3")
@@ -104,6 +110,7 @@ def open_stil_connection() -> webdriver.Chrome:
     browser.maximize_window()
     browser.get(config.STIL_LOGIN_URL)
 
+    # Load the STIL login page and pre-select the Aarhus Kommune Lokal IdP.
     try:
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "LoginMenuItem_2"))
@@ -115,17 +122,47 @@ def open_stil_connection() -> webdriver.Chrome:
 
         browser.find_element(By.ID, "ddlLocalIdPOrganization-input").click()
         browser.find_element(By.ID, "btnSubmit").click()
+    except WebDriverException as e:
+        # Covers timeouts, missing elements, and a closed/crashed browser.
+        logger.exception("STIL-loginsiden kunne ikke indlæses")
+        with contextlib.suppress(Exception):
+            browser.quit()
+        raise TimeoutError(
+            "STIL-loginsiden kunne ikke indlæses. Tjek din internetforbindelse "
+            "og at STIL er tilgængelig, og prøv igen."
+        ) from e
 
-        logger.info("Waiting for user to login...")
+    # Wait for the user to complete the manual MitID login.
+    logger.info("Venter på at brugeren logger ind...")
+    try:
         WebDriverWait(browser, config.LOGIN_USER_TIMEOUT).until(
             EC.element_to_be_clickable((By.ID, "organisation-search"))
         )
-        logger.info("Login successful. Continuing...")
+    except TimeoutException as e:
+        minutes = config.LOGIN_USER_TIMEOUT // 60
+        logger.exception("Login blev ikke gennemført i tide")
+        with contextlib.suppress(Exception):
+            browser.quit()
+        raise TimeoutError(
+            f"Login blev ikke gennemført inden for {minutes} minutter. "
+            "Prøv igen, og log ind i STIL når browseren åbner."
+        ) from e
+    except WebDriverException as e:
+        # The user closed the browser window (or it crashed) mid-login.
+        logger.exception("Browseren blev lukket eller mistede forbindelsen under login")
+        with contextlib.suppress(Exception):
+            browser.quit()
+        raise RuntimeError(
+            "Browseren blev lukket under login. Start igen, og lad browservinduet "
+            "stå åbent indtil du er logget ind i STIL."
+        ) from e
+    logger.info("Login gennemført. Fortsætter...")
 
-    except (TimeoutException, NoSuchElementException):
-        logger.exception("Error during login")
-        browser.quit()
-        raise
+    # Login done – get the browser out of the way and bring the GUI back up.
+    with contextlib.suppress(Exception):
+        browser.minimize_window()
+    if reporter is not None:
+        reporter.focus()
 
     return browser
 
@@ -175,7 +212,7 @@ def get_org(org_num: str, org_dict: dict, session: Session) -> Response:
         timeout=config.REQUEST_TIMEOUT,
     )
     if resp.status_code != HTTP_OK:
-        logger.error("Error fetching organisation: %s", org_num)
+        logger.error("Fejl ved hentning af organisation: %s", org_num)
         raise ResponseError(resp)
     return resp
 
@@ -187,7 +224,7 @@ def get_data(session: Session, org_num: str | None = None) -> dict:
     """
     resp = session.get(config.STIL_HENT_ADGANG_URL, timeout=config.REQUEST_TIMEOUT)
     if resp.status_code != HTTP_OK:
-        logger.error("Error while accessing data for organisation: %s", org_num)
+        logger.error("Fejl ved hentning af data for organisation: %s", org_num)
         raise ResponseError(resp)
 
     data_access_json = json.loads(resp.text)
@@ -206,7 +243,7 @@ def delete_agreement(agreement: dict, session: Session) -> Response:
         timeout=config.REQUEST_TIMEOUT,
     )
     if resp.status_code != HTTP_OK:
-        logger.error("Error when deleting agreement: %s", resp)
+        logger.error("Fejl ved sletning af aftale: %s", resp)
         raise ResponseError(resp)
     return resp
 
@@ -221,7 +258,7 @@ def change_status(reference: str, agreement: dict, session: Session) -> Response
         )
 
     logger.info(
-        "Setting status from %s to %s", agreement.get("aktuelStatus"), set_status
+        "Ændrer status fra %s til %s", agreement.get("aktuelStatus"), set_status
     )
 
     payload = json.dumps(
@@ -238,7 +275,7 @@ def change_status(reference: str, agreement: dict, session: Session) -> Response
         timeout=config.REQUEST_TIMEOUT,
     )
     if resp.status_code != HTTP_OK:
-        logger.error("Error while changing status")
+        logger.error("Fejl ved ændring af status")
         raise ResponseError(resp)
     return resp
 

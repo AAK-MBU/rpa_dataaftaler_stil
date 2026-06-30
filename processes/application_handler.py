@@ -45,11 +45,11 @@ def get_app() -> AppContext | None:
 def startup(reporter: ProgressReporter | None = None) -> None:
     """Open STIL, wait for manual login, and build the shared auth context."""
     reporter = reporter or NullReporter()
-    logger.info("Starting applications...")
+    logger.info("Starter applikationer...")
     reporter.phase("Login")
     reporter.log("Åbner STIL i browseren – log venligst ind...")
 
-    browser = open_stil_connection()
+    browser = open_stil_connection(reporter)
 
     base_cookie, x_xsrf_token = get_base_cookies(browser)
     cookie_inst_list = get_browser_cookie("AuthTokenTilslutning", browser)
@@ -81,19 +81,19 @@ def startup(reporter: ProgressReporter | None = None) -> None:
 
 def soft_close() -> None:
     """Gracefully close the browser."""
-    logger.info("Closing applications softly...")
+    logger.info("Lukker applikationer blødt...")
     if APP is not None and APP.browser is not None:
         APP.browser.quit()
 
 
 def hard_close() -> None:
     """Forcefully close the browser (best effort)."""
-    logger.info("Closing applications hard...")
+    logger.info("Lukker applikationer hårdt...")
     if APP is not None and APP.browser is not None:
         try:
             APP.browser.quit()
         except Exception:
-            logger.exception("Failed to hard-close browser")
+            logger.exception("Kunne ikke tvangslukke browseren")
 
 
 def close() -> None:

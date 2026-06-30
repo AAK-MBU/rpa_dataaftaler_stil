@@ -38,7 +38,7 @@ class StopRequested(Exception):
 class ReporterEvent:
     """A single event sent from the worker thread to the GUI."""
 
-    kind: str  # "log" | "progress" | "phase" | "summary" | "done"
+    kind: str  # "log" | "progress" | "phase" | "summary" | "focus" | "done"
     message: str = ""
     level: str = "info"  # for "log" events
     current: int = 0  # for "progress" events
@@ -61,14 +61,21 @@ class ProgressReporter:
 
     def phase(self, name: str) -> None:
         """Announce that a new phase of the run has started."""
-        logger.info("Phase: %s", name)
+        logger.info("Fase: %s", name)
 
     def checkpoint(self) -> None:
         """Cooperative cancellation point. No-op for the headless reporter."""
 
-    def summary(self, data: dict) -> None:
-        """Report the final result summary."""
-        logger.info("Summary: %s", data)
+    def focus(self) -> None:
+        """Request that the GUI window be brought back to the front. No-op here."""
+
+    def summary(self, data: dict, message: str = "") -> None:  # noqa: ARG002
+        """Report the final result summary.
+
+        ``message`` is an optional pre-formatted line for the GUI summary box;
+        the headless reporter just logs the raw data.
+        """
+        logger.info("Opsummering: %s", data)
 
     def done(self, message: str = "") -> None:
         """Signal that the run has finished (success, error, or stopped)."""
@@ -109,7 +116,7 @@ class GuiReporter(ProgressReporter):
         self._queue.put(ReporterEvent(kind="progress", current=current, total=total))
 
     def phase(self, name: str) -> None:
-        logger.info("Phase: %s", name)
+        logger.info("Fase: %s", name)
         self._queue.put(ReporterEvent(kind="phase", message=name))
 
     def checkpoint(self) -> None:
@@ -119,9 +126,12 @@ class GuiReporter(ProgressReporter):
         if self._stop_event.is_set():
             raise StopRequested
 
-    def summary(self, data: dict) -> None:
-        logger.info("Summary: %s", data)
-        self._queue.put(ReporterEvent(kind="summary", data=data))
+    def focus(self) -> None:
+        self._queue.put(ReporterEvent(kind="focus"))
+
+    def summary(self, data: dict, message: str = "") -> None:
+        logger.info("Opsummering: %s", data)
+        self._queue.put(ReporterEvent(kind="summary", data=data, message=message))
 
     def done(self, message: str = "") -> None:
         if message:

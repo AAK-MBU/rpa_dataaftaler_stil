@@ -49,9 +49,9 @@ def handle_error(
     if context is None:
         context = ErrorContext()
     error_json = json.dumps(error.__dictinfo__())
-    log_msg = f"Error: {error}"
+    log_msg = f"Fejl: {error}"
     if context.item:
-        log_msg = f"{repr(error)} raised for item: {context.item}. " + log_msg
+        log_msg = f"{repr(error)} rejst for element: {context.item}. " + log_msg
         if context.action:
             context.action(error_json)
     log(log_msg)

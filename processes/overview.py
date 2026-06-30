@@ -66,9 +66,9 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
     Returns the path of the written spreadsheet.
     """
     reporter = reporter or NullReporter()
-    reporter.phase("Dann overblik")
+    reporter.phase("Dan overblik")
 
-    browser = open_stil_connection()
+    browser = open_stil_connection(reporter)
     try:
         base_cookie, x_xsrf_token = get_base_cookies(browser)
         cookie_inst_list = get_browser_cookie("AuthTokenTilslutning", browser)
@@ -105,6 +105,10 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
                     "overbelaste STIL."
                 )
                 time.sleep(config.THROTTLE_PAUSE_SECONDS)
+                reporter.log(
+                    f"Pause på {config.THROTTLE_PAUSE_SECONDS} sekunder afsluttet "
+                    "– fortsætter API-kald."
+                )
                 api_counter = 0
                 window_start = time.monotonic()
 
@@ -147,7 +151,9 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
                 "institutioner": unique_insts,
                 "uden_aftaler": len(orgs_without_agr),
                 "fil": path,
-            }
+            },
+            f"{len(all_agreements)} aftaler fra {unique_insts} institutioner gemt. "
+            f"Overblik gemt: {path}",
         )
         return path
     finally:
@@ -180,8 +186,8 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
             statusaendring_cell = worksheet[f"D{row}"]  # 'statusændring' column
             if status_cell.value != "SLETTET":
                 dv = DataValidation(type="list", formula1='"GODKEND, SLET, VENT"')
-                dv.error_title = "Invalid input"
-                dv.error_message = "Please select a value from the dropdown list"
+                dv.error_title = "Ugyldigt input"
+                dv.error_message = "Vælg venligst en værdi fra rullelisten"
                 worksheet.add_data_validation(dv)
                 dv.add(statusaendring_cell)
 

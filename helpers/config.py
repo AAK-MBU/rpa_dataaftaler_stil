@@ -88,6 +88,20 @@ def get_log_dir() -> Path:
 
 
 # ----------------------
+# Automation Server (workqueue) connection
+# ----------------------
+# Env vars the desktop run needs to reach the Automation Server workqueue. The
+# ATS client only validates ATS_URL itself (and with an English message), so we
+# check all three up front to give the caseworker one clear Danish message.
+REQUIRED_ATS_ENV = ("ATS_URL", "ATS_TOKEN", "ATS_WORKQUEUE_OVERRIDE")
+
+
+def missing_ats_env() -> list[str]:
+    """Return the required ATS env vars that are unset/empty (in declared order)."""
+    return [name for name in REQUIRED_ATS_ENV if not os.getenv(name)]
+
+
+# ----------------------
 # Error handling
 # ----------------------
 # DB-backed error emails are off by default for desktop runs (no RPAConnection

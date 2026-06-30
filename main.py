@@ -38,8 +38,9 @@ async def populate_queue(
     """Populate the workqueue with items read from the reviewed overview Excel."""
     reporter = reporter or NullReporter()
     reporter.phase("Indlæs ændringer i kø")
-    logger.info("Populating workqueue...")
+    logger.info("Fylder arbejdskøen...")
 
+    reporter.log(f"Læser revideret overblik fra mappen: {config.get_output_dir()}")
     items_to_queue = retrieve_items_for_queue()
 
     queue_references = {str(r) for r in ats_functions.get_workqueue_items(workqueue)}
@@ -49,7 +50,7 @@ async def populate_queue(
         reference = str(item.get("reference") or "")
         if reference and reference in queue_references:
             logger.info(
-                "Reference: %s already in queue. Item: %s not added",
+                "Reference: %s er allerede i køen. Element: %s blev ikke tilføjet",
                 reference,
                 item,
             )
@@ -58,7 +59,7 @@ async def populate_queue(
 
     reporter.log(f"{len(new_items)} nye ændringer tilføjes til køen.")
     await concurrent_add(workqueue, new_items)
-    logger.info("Finished populating workqueue.")
+    logger.info("Færdig med at fylde arbejdskøen.")
 
 
 async def process_workqueue(
@@ -67,7 +68,7 @@ async def process_workqueue(
     """Process items from the workqueue, applying each change in STIL."""
     reporter = reporter or NullReporter()
     reporter.phase("Behandl kø")
-    logger.info("Processing workqueue...")
+    logger.info("Behandler arbejdskøen...")
 
     startup(reporter)
 
@@ -83,7 +84,7 @@ async def process_workqueue(
                         data, reference = ats_functions.get_item_info(item)
 
                         try:
-                            logger.info("Processing item with reference: %s", reference)
+                            logger.info("Behandler element med reference: %s", reference)
                             process_item(data, reference, reporter)
 
                             completed_state = CompletedState.completed(
@@ -119,7 +120,7 @@ async def process_workqueue(
 
             break
 
-        logger.info("Finished processing workqueue.")
+        logger.info("Færdig med at behandle arbejdskøen.")
     finally:
         close()
 
@@ -127,11 +128,11 @@ async def process_workqueue(
 async def finalize(workqueue: Workqueue, reporter: ProgressReporter | None = None):
     """Finalize process and produce the end-result summary."""
     reporter = reporter or NullReporter()
-    logger.info("Finalizing process...")
+    logger.info("Afslutter processen...")
 
     try:
         finalize_process(workqueue, reporter)
-        logger.info("Finished finalizing process.")
+        logger.info("Færdig med at afslutte processen.")
 
     except BusinessError as e:
         handle_error(error=e, log=logger.info)

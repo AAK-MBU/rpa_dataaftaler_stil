@@ -16,11 +16,16 @@ that the Tk main loop drains. The worker never touches Tk widgets directly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import os
 import queue
+import subprocess
+import sys
 import threading
 import tkinter as tk
 from datetime import datetime
+from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
 from zoneinfo import ZoneInfo
 
@@ -30,10 +35,35 @@ from dotenv import load_dotenv
 from helpers import config
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
 from main import finalize, populate_queue, process_workqueue
-from processes.finalize_process import format_summary_message
 from processes.overview import run_overview
 
 logger = logging.getLogger(__name__)
+
+
+def _open_in_default_app(path: str) -> None:
+    """Open a file with the OS default application (Windows/macOS/Linux)."""
+    if sys.platform.startswith("win"):
+        os.startfile(path)  # noqa: S606 — Windows-only, trusted local path
+    elif sys.platform == "darwin":
+        subprocess.run(["open", path], check=False)  # noqa: S603, S607
+    else:
+        subprocess.run(["xdg-open", path], check=False)  # noqa: S603, S607
+
+
+class _NoTracebackFormatter(logging.Formatter):
+    """Formats only the message line – never the exception/stack traceback.
+
+    The traceback still reaches the run-log file (whose handler formats the same
+    record afterwards); the GUI history just shows the human-readable line.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        saved = (record.exc_info, record.exc_text, record.stack_info)
+        record.exc_info = record.exc_text = record.stack_info = None
+        try:
+            return super().format(record)
+        finally:
+            record.exc_info, record.exc_text, record.stack_info = saved
 
 
 class _QueueLogHandler(logging.Handler):
@@ -52,22 +82,28 @@ class _QueueLogHandler(logging.Handler):
 
 def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     """Route logging to the GUI history queue and a timestamped run log file."""
-    formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s — %(message)s", datefmt="%H:%M:%S"
-    )
-
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
+    # GUI history: terse "time [level] message" – no module name, no traceback.
     gui_handler = _QueueLogHandler(event_queue)
-    gui_handler.setFormatter(formatter)
+    gui_handler.setFormatter(
+        _NoTracebackFormatter(
+            "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
+        )
+    )
     root_logger.addHandler(gui_handler)
 
+    # Run log file: keep the module name for debugging.
     stamp = datetime.now(tz=ZoneInfo("Europe/Copenhagen")).strftime("%Y%m%d_%H%M%S")
     file_handler = logging.FileHandler(
         config.get_log_dir() / f"run_{stamp}.log", encoding="utf-8"
     )
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s — %(message)s", datefmt="%H:%M:%S"
+        )
+    )
     root_logger.addHandler(file_handler)
 
 
@@ -78,6 +114,7 @@ class DataaftalerApp:
         self.root = root
         self.root.title("Dataaftaler – STIL")
         self.root.geometry("820x600")
+        self._set_window_icon()
 
         # Worker <-> GUI plumbing
         self.event_queue: queue.Queue[ReporterEvent] = queue.Queue()
@@ -86,6 +123,8 @@ class DataaftalerApp:
         self.reporter = GuiReporter(self.event_queue, self.pause_event, self.stop_event)
         self.worker: threading.Thread | None = None
         self.last_summary: dict | None = None
+        self.last_summary_message: str = ""
+        self.overview_path: str | None = None
 
         _setup_logging(self.event_queue)
         self._build_widgets()
@@ -93,13 +132,33 @@ class DataaftalerApp:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(config.GUI_POLL_MS, self._drain_events)
 
+    def _set_window_icon(self) -> None:
+        """Use app.ico for the title-bar icon and the Windows taskbar icon."""
+        ico = Path(__file__).resolve().parent.parent / "app.ico"
+        if not ico.exists():
+            return
+        # Give the process its own identity so Windows uses our icon on the
+        # taskbar (not the generic pythonw icon) when launched windowless.
+        if sys.platform.startswith("win"):
+            with contextlib.suppress(Exception):
+                import ctypes  # noqa: PLC0415
+
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "aarhus.kommune.dataaftaler.stil"
+                )
+        # `default=` applies the icon to this window and future dialogs too.
+        try:
+            self.root.iconbitmap(default=str(ico))
+        except tk.TclError:
+            logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
+
     # ------------------------------------------------------------------ UI
     def _build_widgets(self) -> None:
         controls = ttk.Frame(self.root, padding=10)
         controls.pack(fill=tk.X)
 
         self.btn_overview = ttk.Button(
-            controls, text="Dann overblik (Excel)", command=self._start_overview
+            controls, text="Dan overblik (Excel)", command=self._start_overview
         )
         self.btn_overview.pack(side=tk.LEFT, padx=4)
 
@@ -117,6 +176,11 @@ class DataaftalerApp:
             controls, text="Stop", command=self._request_stop, state=tk.DISABLED
         )
         self.btn_stop.pack(side=tk.LEFT, padx=4)
+
+        self.btn_open = ttk.Button(
+            controls, text="Åbn regneark", command=self._open_overview, state=tk.DISABLED
+        )
+        self.btn_open.pack(side=tk.LEFT, padx=4)
 
         progress = ttk.Frame(self.root, padding=(10, 0))
         progress.pack(fill=tk.X)
@@ -161,6 +225,7 @@ class DataaftalerApp:
         self.stop_event.clear()
         self.pause_event.clear()
         self.last_summary = None
+        self.last_summary_message = ""
         self.summary_var.set("")
         self._set_progress(0, 0)
 
@@ -198,9 +263,21 @@ class DataaftalerApp:
 
     def _full_run_worker(self) -> None:
         try:
-            load_dotenv()
-            ats = AutomationServer.from_environment()
-            workqueue = ats.workqueue()
+            missing = config.missing_ats_env()
+            if missing:
+                raise ValueError(
+                    "Automation Server er ikke konfigureret. Følgende mangler i "
+                    f".env: {', '.join(missing)}. Udfyld dem og start igen."
+                )
+            try:
+                ats = AutomationServer.from_environment()
+                workqueue = ats.workqueue()
+            except Exception as e:
+                raise ValueError(
+                    "Kunne ikke oprette forbindelse til Automation Server. "
+                    "Tjek ATS_URL, ATS_TOKEN og ATS_WORKQUEUE_OVERRIDE i .env. "
+                    f"(Teknisk: {e})"
+                ) from e
 
             asyncio.run(populate_queue(workqueue, self.reporter))
             asyncio.run(process_workqueue(workqueue, self.reporter))
@@ -233,8 +310,22 @@ class DataaftalerApp:
             self.phase_var.set(f"Fase: {event.message}")
         elif event.kind == "summary":
             self.last_summary = event.data
+            self.last_summary_message = event.message
+            overview_file = event.data.get("fil")
+            if overview_file:
+                self.overview_path = str(overview_file)
+        elif event.kind == "focus":
+            self._focus_window()
         elif event.kind == "done":
             self._on_done(event.message)
+
+    def _focus_window(self) -> None:
+        """Bring the GUI back to the front (after the browser is minimised)."""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+        self.root.after(300, lambda: self.root.attributes("-topmost", False))
+        self.root.focus_force()
 
     def _append_history(self, message: str) -> None:
         self.history.config(state=tk.NORMAL)
@@ -253,8 +344,8 @@ class DataaftalerApp:
     def _on_done(self, message: str) -> None:
         self._set_running_state(False)
         self.phase_var.set("Klar.")
-        if self.last_summary is not None:
-            self.summary_var.set(format_summary_message(self.last_summary))
+        if self.last_summary_message:
+            self.summary_var.set(self.last_summary_message)
         elif message:
             self.summary_var.set(message)
 
@@ -265,6 +356,25 @@ class DataaftalerApp:
         self.btn_run.config(state=run_state)
         self.btn_pause.config(state=ctl_state, text="Pause")
         self.btn_stop.config(state=ctl_state)
+        # The "open spreadsheet" button is available while idle once an overview
+        # has been produced this session.
+        open_state = (
+            tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
+        )
+        self.btn_open.config(state=open_state)
+
+    def _open_overview(self) -> None:
+        if not self.overview_path or not Path(self.overview_path).exists():
+            messagebox.showwarning(
+                "Filen findes ikke",
+                "Regnearket kunne ikke findes. Dan overblikket igen.",
+            )
+            return
+        try:
+            _open_in_default_app(self.overview_path)
+        except OSError as e:
+            logger.exception("Kunne ikke åbne regnearket")
+            messagebox.showerror("Fejl", f"Kunne ikke åbne regnearket: {e}")
 
     def _on_close(self) -> None:
         if self.worker and self.worker.is_alive():
@@ -280,6 +390,8 @@ class DataaftalerApp:
 
 def main() -> None:
     """Launch the desktop application."""
+    # Load .env before anything reads config (BASE_DIR drives the Output/log dirs).
+    load_dotenv()
     root = tk.Tk()
     DataaftalerApp(root)
     root.mainloop()
