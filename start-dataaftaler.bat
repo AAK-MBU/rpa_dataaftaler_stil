@@ -11,7 +11,7 @@ REM uv installs to %USERPROFILE%\.local\bin by default; add it for this session.
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 
 :have_uv
-echo Klargoer programmet (kan tage lidt tid foerste gang)...
+echo Klargør programmet (kan tage lidt tid første gang)...
 uv sync || (echo. & echo Fejl under installation. Kontakt support. & pause & exit /b 1)
 
 REM Launch windowless via the synced venv, then close this console.
