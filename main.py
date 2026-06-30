@@ -84,7 +84,9 @@ async def process_workqueue(
                         data, reference = ats_functions.get_item_info(item)
 
                         try:
-                            logger.info("Behandler element med reference: %s", reference)
+                            logger.info(
+                                "Behandler element med reference: %s", reference
+                            )
                             process_item(data, reference, reporter)
 
                             completed_state = CompletedState.completed(

@@ -159,7 +159,9 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
             for attempt in range(1, config.MAX_RETRIES + 1):
                 try:
                     await asyncio.to_thread(workqueue.add_item, data, reference)
-                    logger.info("Tilføjede element til køen med reference: %s", reference)
+                    logger.info(
+                        "Tilføjede element til køen med reference: %s", reference
+                    )
                     return True
 
                 except Exception as e:
