@@ -178,7 +178,10 @@ class DataaftalerApp:
         self.btn_stop.pack(side=tk.LEFT, padx=4)
 
         self.btn_open = ttk.Button(
-            controls, text="Åbn regneark", command=self._open_overview, state=tk.DISABLED
+            controls,
+            text="Åbn regneark",
+            command=self._open_overview,
+            state=tk.DISABLED,
         )
         self.btn_open.pack(side=tk.LEFT, padx=4)
 
@@ -358,9 +361,7 @@ class DataaftalerApp:
         self.btn_stop.config(state=ctl_state)
         # The "open spreadsheet" button is available while idle once an overview
         # has been produced this session.
-        open_state = (
-            tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
-        )
+        open_state = tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
         self.btn_open.config(state=open_state)
 
     def _open_overview(self) -> None:
