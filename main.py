@@ -40,6 +40,7 @@ async def populate_queue(
     reporter.phase("Indlæs ændringer i kø")
     logger.info("Fylder arbejdskøen...")
 
+    reporter.log(f"Læser revideret overblik fra mappen: {config.get_output_dir()}")
     items_to_queue = retrieve_items_for_queue()
 
     queue_references = {str(r) for r in ats_functions.get_workqueue_items(workqueue)}

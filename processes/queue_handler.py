@@ -78,8 +78,10 @@ def retrieve_items_for_queue() -> list[dict]:
     if len(excel_files) != 1:
         names = ", ".join(os.path.basename(f) for f in excel_files)
         raise ValueError(
-            "Der skal være præcis ét Oversigt-regneark i Output-mappen. "
-            f"Slet gamle filer. Filer fundet: {names or '(ingen)'}"
+            "Der skal være præcis ét Oversigt-regneark i mappen "
+            f"'{output_dir}'. Det reviderede regneark skal ligge dér (det er også "
+            "hvor 'Dan overblik' gemmer det). Slet evt. gamle filer. "
+            f"Filer fundet: {names or '(ingen)'}"
         )
 
     excel_path = excel_files[0]

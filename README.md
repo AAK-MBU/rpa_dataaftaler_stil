@@ -47,10 +47,15 @@ Relevante `.env`-værdier:
 
 ## Kørsel
 
-**Desktop-app (normal brug):**
+**Slutbruger (uden Python-kendskab):** dobbeltklik `start-dataaftaler.bat`. Første
+kørsel installerer `uv` og afhængigheder automatisk; derefter åbner vinduet uden
+konsol. Se [`INSTALL.md`](INSTALL.md) for opsætning og hvordan man laver en genvej
+på skrivebordet.
+
+**Desktop-app (udvikling):**
 
 ```sh
-uv run python -m gui.app
+uv run python -m gui.app    # eller, efter `uv sync`:  uv run dataaftaler
 ```
 
 **Headless (samme faser, uden GUI – fx fra Automation Server):**

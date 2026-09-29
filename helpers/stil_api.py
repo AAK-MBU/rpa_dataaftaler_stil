@@ -12,12 +12,13 @@ the auth cookies and drive the rest of the flow through plain ``requests`` calls
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -27,6 +28,8 @@ from helpers.exceptions import ResponseError
 
 if TYPE_CHECKING:
     from requests import Response, Session
+
+    from helpers.reporting import ProgressReporter
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +95,14 @@ def switch_to_new_tab(browser: webdriver.Chrome) -> None:
         browser.switch_to.window(browser.window_handles[1])
 
 
-def open_stil_connection() -> webdriver.Chrome:
+def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.Chrome:
     """Open STIL in Chrome and wait for the user to complete the manual login.
 
     Returns the live Chrome webdriver once login has succeeded. Raises on timeout
     or missing elements (after closing the browser).
+
+    Once login is done the browser is minimised and ``reporter.focus()`` is called
+    so the GUI returns to the foreground while the automated work runs.
     """
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("log-level=3")
@@ -116,9 +122,11 @@ def open_stil_connection() -> webdriver.Chrome:
 
         browser.find_element(By.ID, "ddlLocalIdPOrganization-input").click()
         browser.find_element(By.ID, "btnSubmit").click()
-    except (TimeoutException, NoSuchElementException) as e:
+    except WebDriverException as e:
+        # Covers timeouts, missing elements, and a closed/crashed browser.
         logger.exception("STIL-loginsiden kunne ikke indlæses")
-        browser.quit()
+        with contextlib.suppress(Exception):
+            browser.quit()
         raise TimeoutError(
             "STIL-loginsiden kunne ikke indlæses. Tjek din internetforbindelse "
             "og at STIL er tilgængelig, og prøv igen."
@@ -133,12 +141,28 @@ def open_stil_connection() -> webdriver.Chrome:
     except TimeoutException as e:
         minutes = config.LOGIN_USER_TIMEOUT // 60
         logger.exception("Login blev ikke gennemført i tide")
-        browser.quit()
+        with contextlib.suppress(Exception):
+            browser.quit()
         raise TimeoutError(
             f"Login blev ikke gennemført inden for {minutes} minutter. "
             "Prøv igen, og log ind i STIL når browseren åbner."
         ) from e
+    except WebDriverException as e:
+        # The user closed the browser window (or it crashed) mid-login.
+        logger.exception("Browseren blev lukket eller mistede forbindelsen under login")
+        with contextlib.suppress(Exception):
+            browser.quit()
+        raise RuntimeError(
+            "Browseren blev lukket under login. Start igen, og lad browservinduet "
+            "stå åbent indtil du er logget ind i STIL."
+        ) from e
     logger.info("Login gennemført. Fortsætter...")
+
+    # Login done – get the browser out of the way and bring the GUI back up.
+    with contextlib.suppress(Exception):
+        browser.minimize_window()
+    if reporter is not None:
+        reporter.focus()
 
     return browser
 

@@ -49,7 +49,7 @@ def startup(reporter: ProgressReporter | None = None) -> None:
     reporter.phase("Login")
     reporter.log("Åbner STIL i browseren – log venligst ind...")
 
-    browser = open_stil_connection()
+    browser = open_stil_connection(reporter)
 
     base_cookie, x_xsrf_token = get_base_cookies(browser)
     cookie_inst_list = get_browser_cookie("AuthTokenTilslutning", browser)

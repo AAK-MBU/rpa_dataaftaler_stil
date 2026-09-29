@@ -38,7 +38,7 @@ class StopRequested(Exception):
 class ReporterEvent:
     """A single event sent from the worker thread to the GUI."""
 
-    kind: str  # "log" | "progress" | "phase" | "summary" | "done"
+    kind: str  # "log" | "progress" | "phase" | "summary" | "focus" | "done"
     message: str = ""
     level: str = "info"  # for "log" events
     current: int = 0  # for "progress" events
@@ -65,6 +65,9 @@ class ProgressReporter:
 
     def checkpoint(self) -> None:
         """Cooperative cancellation point. No-op for the headless reporter."""
+
+    def focus(self) -> None:
+        """Request that the GUI window be brought back to the front. No-op here."""
 
     def summary(self, data: dict, message: str = "") -> None:  # noqa: ARG002
         """Report the final result summary.
@@ -122,6 +125,9 @@ class GuiReporter(ProgressReporter):
             time.sleep(_PAUSE_POLL_SECONDS)
         if self._stop_event.is_set():
             raise StopRequested
+
+    def focus(self) -> None:
+        self._queue.put(ReporterEvent(kind="focus"))
 
     def summary(self, data: dict, message: str = "") -> None:
         logger.info("Opsummering: %s", data)

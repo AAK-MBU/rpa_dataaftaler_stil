@@ -17,11 +17,21 @@ dependencies = [
     "python-dotenv",
 ]
 
+[project.scripts]
+# Console entry point: after `uv sync`, run the app with `uv run dataaftaler`.
+dataaftaler = "gui.app:main"
+
 [tool.uv.sources]
 automation-server-client = { git = "https://github.com/odense-rpa/automation-server-client.git", tag = "v0.2.0" }
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools]
-py-modules = []
+# Flat layout: one top-level module (main) plus the package directories.
+py-modules = ["main"]
+packages = ["gui", "helpers", "processes"]
 
 [tool.ruff]
 target-version = "py313"

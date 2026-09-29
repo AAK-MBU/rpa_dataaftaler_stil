@@ -556,7 +556,7 @@ wheels = [
 [[package]]
 name = "rpa-dataaftaler-stil"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "automation-server-client" },
     { name = "mbu-dev-shared-components" },

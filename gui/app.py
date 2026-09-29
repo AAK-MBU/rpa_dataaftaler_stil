@@ -16,6 +16,7 @@ that the Tk main loop drains. The worker never touches Tk widgets directly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import queue
@@ -40,8 +41,29 @@ logger = logging.getLogger(__name__)
 
 
 def _open_in_default_app(path: str) -> None:
-    """Open a file with the OS default application (Windows)."""
-    os.startfile(path)  # noqa: S606 — Windows-only, trusted local path
+    """Open a file with the OS default application (Windows/macOS/Linux)."""
+    if sys.platform.startswith("win"):
+        os.startfile(path)  # noqa: S606 — Windows-only, trusted local path
+    elif sys.platform == "darwin":
+        subprocess.run(["open", path], check=False)  # noqa: S603, S607
+    else:
+        subprocess.run(["xdg-open", path], check=False)  # noqa: S603, S607
+
+
+class _NoTracebackFormatter(logging.Formatter):
+    """Formats only the message line – never the exception/stack traceback.
+
+    The traceback still reaches the run-log file (whose handler formats the same
+    record afterwards); the GUI history just shows the human-readable line.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        saved = (record.exc_info, record.exc_text, record.stack_info)
+        record.exc_info = record.exc_text = record.stack_info = None
+        try:
+            return super().format(record)
+        finally:
+            record.exc_info, record.exc_text, record.stack_info = saved
 
 
 class _QueueLogHandler(logging.Handler):
@@ -63,10 +85,12 @@ def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # GUI history: terse "time [level] message" – no module name.
+    # GUI history: terse "time [level] message" – no module name, no traceback.
     gui_handler = _QueueLogHandler(event_queue)
     gui_handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        _NoTracebackFormatter(
+            "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
+        )
     )
     root_logger.addHandler(gui_handler)
 
@@ -90,6 +114,7 @@ class DataaftalerApp:
         self.root = root
         self.root.title("Dataaftaler – STIL")
         self.root.geometry("820x600")
+        self._set_window_icon()
 
         # Worker <-> GUI plumbing
         self.event_queue: queue.Queue[ReporterEvent] = queue.Queue()
@@ -106,6 +131,26 @@ class DataaftalerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(config.GUI_POLL_MS, self._drain_events)
+
+    def _set_window_icon(self) -> None:
+        """Use app.ico for the title-bar icon and the Windows taskbar icon."""
+        ico = Path(__file__).resolve().parent.parent / "app.ico"
+        if not ico.exists():
+            return
+        # Give the process its own identity so Windows uses our icon on the
+        # taskbar (not the generic pythonw icon) when launched windowless.
+        if sys.platform.startswith("win"):
+            with contextlib.suppress(Exception):
+                import ctypes  # noqa: PLC0415
+
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "aarhus.kommune.dataaftaler.stil"
+                )
+        # `default=` applies the icon to this window and future dialogs too.
+        try:
+            self.root.iconbitmap(default=str(ico))
+        except tk.TclError:
+            logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
 
     # ------------------------------------------------------------------ UI
     def _build_widgets(self) -> None:
@@ -133,10 +178,7 @@ class DataaftalerApp:
         self.btn_stop.pack(side=tk.LEFT, padx=4)
 
         self.btn_open = ttk.Button(
-            controls,
-            text="Åbn regneark",
-            command=self._open_overview,
-            state=tk.DISABLED,
+            controls, text="Åbn regneark", command=self._open_overview, state=tk.DISABLED
         )
         self.btn_open.pack(side=tk.LEFT, padx=4)
 
@@ -272,8 +314,18 @@ class DataaftalerApp:
             overview_file = event.data.get("fil")
             if overview_file:
                 self.overview_path = str(overview_file)
+        elif event.kind == "focus":
+            self._focus_window()
         elif event.kind == "done":
             self._on_done(event.message)
+
+    def _focus_window(self) -> None:
+        """Bring the GUI back to the front (after the browser is minimised)."""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+        self.root.after(300, lambda: self.root.attributes("-topmost", False))
+        self.root.focus_force()
 
     def _append_history(self, message: str) -> None:
         self.history.config(state=tk.NORMAL)
@@ -306,7 +358,9 @@ class DataaftalerApp:
         self.btn_stop.config(state=ctl_state)
         # The "open spreadsheet" button is available while idle once an overview
         # has been produced this session.
-        open_state = tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
+        open_state = (
+            tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
+        )
         self.btn_open.config(state=open_state)
 
     def _open_overview(self) -> None:
