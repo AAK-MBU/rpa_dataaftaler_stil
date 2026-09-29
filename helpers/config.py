@@ -23,13 +23,23 @@ RETRY_BASE_DELAY = 0.5  # seconds (exponential backoff)
 # ----------------------
 REQUEST_TIMEOUT = 10  # seconds
 
-# STIL tilslutning endpoints
+# STIL tilslutning endpoints.
+# Endpoints sat til None er endnu ikke fastlagt; kald mod dem rejser
+# NotImplementedError (se helpers.stil_api._require_url).
 STIL_LOGIN_URL = "https://tilslutning.stil.dk/tilslutning/login"
+# TODO(HAR): bekræft at organisationer-kaldet er uændret.
 STIL_ORGANISATIONER_URL = "https://tilslutning.stil.dk/tilslutningBE/organisationer"
-STIL_ACTIVE_ORG_URL = "https://tilslutning.stil.dk/tilslutningBE/active-organisation"
-STIL_HENT_ADGANG_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/hent"
-STIL_SLET_ADGANG_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/slet"
-STIL_SET_STATUS_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/setStatus"
+# TODO(HAR): skift-organisation (POST).
+STIL_SKIFT_ORG_URL: str | None = None
+# TODO(HAR): aktive dataaftaler for den valgte organisation (GET).
+STIL_DATAAFTALER_URL: str | None = None
+# TODO(HAR): opdater_status (endpoint og metode).
+STIL_OPDATER_STATUS_URL: str | None = None
+STIL_OPDATER_STATUS_METHOD = "POST"  # TODO(HAR): bekræft metode
+
+# Cookies der udgør den faste session efter login.
+# TODO(HAR): bekræft cookie-navne (fx om AuthTokenTilslutning stadig indgår).
+STIL_SESSION_COOKIES = ("persistence-cookie", "SESSION", "XSRF-TOKEN")
 
 # Aarhus Kommune Lokal IdP organisation string used on the login page
 LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"

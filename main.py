@@ -70,11 +70,10 @@ async def process_workqueue(
     reporter.phase("Behandl kø")
     logger.info("Behandler arbejdskøen...")
 
-    startup(reporter)
-
     error_count = 0
 
     try:
+        startup(reporter)
         while error_count < config.MAX_RETRY:
             for item in workqueue:
                 # Cooperative pause/stop point (raises StopRequested under the GUI).

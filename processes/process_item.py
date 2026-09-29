@@ -1,7 +1,6 @@
 """Handle a single queue element: change status, delete, or confirm already-ok.
 
-Ported from the legacy ``queue_handling.process_queue_element``. The shared
-authenticated context (cookies + org lookup) comes from
+The shared authenticated context (session + org lookup) comes from
 :func:`processes.application_handler.get_app`, populated by ``startup()``.
 """
 
@@ -10,17 +9,9 @@ from __future__ import annotations
 import logging
 
 from mbu_rpa_core.exceptions import BusinessError, ProcessError
-from requests import Session
 
 from helpers.reporting import NullReporter, ProgressReporter
-from helpers.stil_api import (
-    change_status,
-    delete_agreement,
-    get_data,
-    get_org,
-    get_request_cookie,
-    get_status,
-)
+from helpers.stil_api import get_data, get_status, update_status
 from processes.application_handler import get_app
 
 logger = logging.getLogger(__name__)
@@ -46,21 +37,17 @@ def process_item(
     current_status = item_data["status"]
     wanted_status = get_status(item_reference)
 
-    # Fresh session seeded with the shared base/auth cookies for this org.
-    session = Session()
-    session.headers.update(
-        {
-            "Cookie": f"{app.base_cookie};{app.cookie_inst_list}",
-            "x-xsrf-token": app.x_xsrf_token,
-        }
-    )
+    if wanted_status is None:
+        raise ValueError(f"Ukendt ønsket status for reference: {item_reference}")
 
-    # Activate the organisation, then refresh the cookie with its org token.
-    org_response = get_org(org_num, app.org_dict, session)
-    org_cookie = get_request_cookie("AuthTokenTilslutning", org_response)
-    session.headers.update({"Cookie": f"{app.base_cookie};{org_cookie}"})
+    if org_num not in app.org_dict:
+        raise BusinessError(
+            f"Institution {org_num} findes ikke blandt de organisationer, "
+            "brugeren har adgang til i STIL"
+        )
 
-    agreements = get_data(session, org_num)
+    app.activate(org_num)
+    agreements = get_data(app.session, org_num)
     agreement = agreements.get(f"{system_name}_{service_name}_{current_status}")
 
     if agreement is None:
@@ -83,14 +70,9 @@ def process_item(
             f"matcher ikke status fra kø-elementet ({current_status})"
         )
 
-    if wanted_status in ("GODKENDT", "VENTER"):
-        change_status(item_reference, agreement, session)
-        reporter.log(
-            f"{org_num}: {system_name}/{service_name} sat fra {current_status} "
-            f"til {wanted_status}."
-        )
-    elif wanted_status == "SLETTET":
-        delete_agreement(agreement, session)
-        reporter.log(f"{org_num}: {system_name}/{service_name} slettet.")
-    else:
-        raise ValueError(f"Ukendt ønsket status for reference: {item_reference}")
+    # TODO(HAR): hvis sletning ikke går via opdater_status, skal SLETTET have sit eget kald.
+    update_status(agreement, wanted_status, app.session)
+    reporter.log(
+        f"{org_num}: {system_name}/{service_name} sat fra {current_status} "
+        f"til {wanted_status}."
+    )

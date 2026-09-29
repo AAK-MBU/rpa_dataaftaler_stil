@@ -1,25 +1,27 @@
 """Application startup / shutdown for the STIL Dataaftaler process.
 
-``startup()`` opens Chrome, waits for the manual STIL login, harvests the auth
-cookies and builds the organisation lookup, then stashes everything in a global
-:class:`AppContext` (retrievable via :func:`get_app`). ``process_item`` reads that
-context for every queue element — this mirrors the legacy robot's ``runtime_args``.
+``startup()`` opens Chrome, waits for the manual STIL login, builds the fixed
+API session from the login cookies and fetches the organisation lookup. It all
+lives in a global :class:`AppContext` (retrievable via :func:`get_app`), which
+both the overview and ``process_item`` use.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-
-from requests import Session
+from typing import TYPE_CHECKING
 
 from helpers.reporting import NullReporter, ProgressReporter
 from helpers.stil_api import (
-    get_base_cookies,
-    get_browser_cookie,
+    build_session,
     get_org_dict,
     open_stil_connection,
+    switch_organisation,
 )
+
+if TYPE_CHECKING:
+    from requests import Session
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +30,25 @@ APP: AppContext | None = None
 
 @dataclass
 class AppContext:
-    """Shared, authenticated state used by every queue item."""
+    """Shared, authenticated state used by every queue item.
+
+    ``active_org`` is the institution most recently selected via
+    :meth:`activate`. The selection is server-side state on ``session``.
+    """
 
     browser: object  # selenium webdriver.Chrome
-    base_cookie: str
-    x_xsrf_token: str
-    cookie_inst_list: str | None
+    session: Session
     org_dict: dict = field(default_factory=dict)
+    active_org: str | None = None
+
+    def activate(self, org_num: str) -> None:
+        """Make ``org_num`` the active institution, skipping the call if it already is."""
+        if self.active_org == org_num:
+            return
+        # Clear first so a failed switch never leaves a stale active_org behind.
+        self.active_org = None
+        switch_organisation(org_num, self.org_dict, self.session)
+        self.active_org = org_num
 
 
 def get_app() -> AppContext | None:
@@ -42,7 +56,7 @@ def get_app() -> AppContext | None:
     return APP
 
 
-def startup(reporter: ProgressReporter | None = None) -> None:
+def startup(reporter: ProgressReporter | None = None) -> AppContext:
     """Open STIL, wait for manual login, and build the shared auth context."""
     reporter = reporter or NullReporter()
     logger.info("Starter applikationer...")
@@ -51,32 +65,21 @@ def startup(reporter: ProgressReporter | None = None) -> None:
 
     browser = open_stil_connection(reporter)
 
-    base_cookie, x_xsrf_token = get_base_cookies(browser)
-    cookie_inst_list = get_browser_cookie("AuthTokenTilslutning", browser)
-
-    session = Session()
-    session.headers.update(
-        {
-            "cookie": f"{base_cookie};{cookie_inst_list}",
-            "x-xsrf-token": x_xsrf_token,
-            "accept": "application/json",
-            "content-type": "application/json",
-            "Accept": "*/*",
-        }
-    )
-    reporter.log("Henter liste over organisationer...")
-    org_dict = get_org_dict(session)
+    try:
+        session = build_session(browser)
+    except Exception:
+        browser.quit()
+        raise
 
     # ruff: noqa: PLW0603
     global APP
-    APP = AppContext(
-        browser=browser,
-        base_cookie=base_cookie,
-        x_xsrf_token=x_xsrf_token,
-        cookie_inst_list=cookie_inst_list,
-        org_dict=org_dict,
-    )
-    reporter.log(f"Login fuldført. {len(org_dict)} organisationer indlæst.")
+    # Registered before get_org_dict so close() also quits the browser if it fails.
+    APP = AppContext(browser=browser, session=session)
+
+    reporter.log("Henter liste over organisationer...")
+    APP.org_dict = get_org_dict(APP.session)
+    reporter.log(f"Login fuldført. {len(APP.org_dict)} organisationer indlæst.")
+    return APP
 
 
 def soft_close() -> None:
