@@ -13,7 +13,7 @@ med et dobbeltklik.
 `uv` (Python-værktøjet) installeres automatisk af launcheren første gang – det
 skal ikke installeres manuelt.
 
-## Opsætning (engang pr. maskine)
+## Opsætning (en gang pr. maskine)
 
 1. Pak projektmappen ud et fast sted, fx `C:\Programmer\Dataaftaler\`.
 2. Kopiér `.env.example` til `.env` i samme mappe, og udfyld værdierne

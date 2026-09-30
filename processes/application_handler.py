@@ -61,7 +61,7 @@ def startup(reporter: ProgressReporter | None = None) -> AppContext:
     reporter = reporter or NullReporter()
     logger.info("Starter applikationer...")
     reporter.phase("Login")
-    reporter.log("Åbner STIL i browseren – log venligst ind...")
+    reporter.log("Åbner STIL i browseren - log venligst ind...")
 
     browser = open_stil_connection(reporter)
 

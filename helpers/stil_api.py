@@ -144,6 +144,9 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
                 )
             )
         ).click()
+        WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
+            EC.element_to_be_clickable((By.ID, "LoginMenuItem_2"))
+        ).click()
         switch_to_new_tab(browser)
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "ddlLocalIdPOrganization-input"))
