@@ -44,7 +44,7 @@ from helpers import config, settings
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
 from main import finalize, populate_queue, process_workqueue, run_local
 from processes.overview import run_overview
-from processes.queue_handler import find_overview_files
+from processes.queue_handler import find_overview_files, is_file_open
 
 logger = logging.getLogger(__name__)
 
@@ -251,9 +251,25 @@ class DataaftalerApp:
             messagebox.showinfo("Kører allerede", "En proces kører allerede.")
             return
         excel_path = self._choose_overview_file()
-        if excel_path is None:
+        if excel_path is None or not self._confirm_file_closed(excel_path):
             return
         self._start_worker(functools.partial(self._full_run_worker, excel_path))
+
+    def _confirm_file_closed(self, excel_path: Path) -> bool:
+        """Warn while ``excel_path`` is open in Excel; True once it can be read.
+
+        Returns False if the user cancels.
+        """
+        while is_file_open(excel_path):
+            if not messagebox.askretrycancel(
+                "Arket er åbent",
+                f"Regnearket '{excel_path.name}' er åbent i Excel og kan ikke "
+                "læses.\n\nGem og luk arket i Excel, og tryk derefter "
+                "'Prøv igen'.",
+                icon=messagebox.WARNING,
+            ):
+                return False
+        return True
 
     def _choose_overview_file(self) -> Path | None:
         """Find the overview sheet to load; ask the user when there are several.

@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -75,6 +76,31 @@ def find_overview_files() -> list[Path]:
         if "oversigt" in f.name.lower() and not f.name.startswith("~$")
     ]
     return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
+
+
+def is_file_open(path: str | Path) -> bool:
+    """Returnér True hvis arket ser ud til at være åbent i Excel.
+
+    Excel lægger en låsefil (``~$`` + filnavnet, for lange navne uden de to
+    første tegn) ved siden af et åbent ark og spærrer arket for skriveadgang på
+    Windows. Begge dele tjekkes; filen ændres ikke.
+    """
+    path = Path(path)
+    lock_names = {f"~${path.name}", f"~${path.name[2:]}"}
+    if any((path.parent / name).exists() for name in lock_names):
+        return True
+    if not os.access(path, os.W_OK):
+        # Skrivebeskyttet fil: skriveadgang siger intet om Excel, og filen kan
+        # stadig læses.
+        return False
+    try:
+        with path.open("r+b"):
+            pass
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]:
