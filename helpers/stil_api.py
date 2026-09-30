@@ -136,7 +136,13 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
     # Load the STIL login page and pre-select the Aarhus Kommune Lokal IdP.
     try:
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
-            EC.presence_of_element_located((By.ID, "LoginMenuItem_2"))
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "//button[contains(@class, 'button-primary')"
+                    " and normalize-space()='Log på']",
+                )
+            )
         ).click()
         switch_to_new_tab(browser)
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
