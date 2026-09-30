@@ -9,9 +9,8 @@ Hvilken institution kaldene gælder, er tilstand på serveren: Den skiftes med
 virker på den valgte institution. Kaldene skal derfor køre sekventielt på samme
 session.
 
-Endpoints der endnu ikke er fastlagt i :mod:`helpers.config` (``None``), rejser
-``NotImplementedError`` ved brug. Steder hvor payload eller svarstruktur skal
-bekræftes, er markeret med ``TODO(HAR)``.
+Endpoints der ikke er sat i :mod:`helpers.config` (``None``), rejser
+``NotImplementedError`` ved brug.
 """
 
 from __future__ import annotations
@@ -36,8 +35,6 @@ if TYPE_CHECKING:
     from helpers.reporting import ProgressReporter
 
 logger = logging.getLogger(__name__)
-
-HTTP_OK = 200
 
 
 # ----------------------------------------------------------------------------
@@ -65,8 +62,8 @@ def _require_url(url: str | None, name: str) -> str:
 
 
 def _check_response(resp: Response, message: str) -> None:
-    """Log ``message`` og rejs :class:`ResponseError` hvis kaldet ikke gav 200."""
-    if resp.status_code != HTTP_OK:
+    """Log ``message`` og rejs :class:`ResponseError` hvis kaldet ikke gav 2xx."""
+    if not 200 <= resp.status_code < 300:  # noqa: PLR2004
         logger.error(message)
         raise ResponseError(resp)
 
@@ -318,24 +315,42 @@ def get_data(session: Session, org_num: str | None = None) -> dict:
     }
 
 
-def update_status(agreement: dict, status: str, session: Session) -> Response:
-    """Sæt aftalens status til ``status`` (``GODKENDT``, ``VENTER`` eller ``SLETTET``).
+def update_status(
+    agreement: dict, status: str, session: Session, kommentar: str = ""
+) -> Response:
+    """Sæt aftalens status til ``status`` (``GODKENDT``, ``VENTER`` eller ``AFVIST``).
 
-    Datakilde: ``config.STIL_OPDATER_STATUS_METHOD`` mod
-    ``config.STIL_OPDATER_STATUS_URL``.
+    Datakilde: PUT ``config.STIL_DATAAFTALE_URL`` med payload
+    ``{"status": <status>, "kommentar": <kommentar>}``.
+
+    Args:
+        agreement: Aftaleobjekt fra :func:`get_data` (bruger ``aftaleId`` og
+            ``aftaleStatus``).
+        status: Den nye status.
+        session: Den faste API-session.
+        kommentar: Kommentar til statusændringen; tom streng hvis ingen.
     """
-    url = _require_url(config.STIL_OPDATER_STATUS_URL, "opdater_status")
+    url = config.STIL_DATAAFTALE_URL.format(aftale_id=agreement["aftaleId"])
     logger.info("Ændrer status fra %s til %s", agreement.get("aftaleStatus"), status)
-
-    # TODO(HAR): bekræft payload, og om sletning også går via dette kald.
-    payload = {"aftaleid": agreement["aftaleId"], "status": status, "kommentar": None}
-    resp = session.request(
-        config.STIL_OPDATER_STATUS_METHOD,
-        url,
-        json=payload,
-        timeout=config.REQUEST_TIMEOUT,
-    )
+    payload = {"status": status, "kommentar": kommentar}
+    resp = session.put(url, json=payload, timeout=config.REQUEST_TIMEOUT)
     _check_response(resp, "Fejl ved ændring af status")
+    return resp
+
+
+def delete_agreement(agreement: dict, session: Session) -> Response:
+    """Slet aftalen.
+
+    Datakilde: DELETE ``config.STIL_DATAAFTALE_URL``.
+
+    Args:
+        agreement: Aftaleobjekt fra :func:`get_data` (bruger ``aftaleId``).
+        session: Den faste API-session.
+    """
+    url = config.STIL_DATAAFTALE_URL.format(aftale_id=agreement["aftaleId"])
+    logger.info("Sletter aftale %s", agreement["aftaleId"])
+    resp = session.delete(url, timeout=config.REQUEST_TIMEOUT)
+    _check_response(resp, "Fejl ved sletning af aftale")
     return resp
 
 

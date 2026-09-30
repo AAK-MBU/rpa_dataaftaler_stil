@@ -40,9 +40,10 @@ STIL_DATAAFTALER_PAGE_SIZE = 300  # største sidestørrelse STIL tillader
 # indgår i kørslen. UDBYDER er udeladt.
 STIL_ORG_TYPES = ("INSTITUTION", "DAGTILBUD", "RESTINSTITUTION")
 
-# TODO(HAR): opdater_status (endpoint og metode).
-STIL_OPDATER_STATUS_URL: str | None = None
-STIL_OPDATER_STATUS_METHOD = "POST"  # TODO(HAR): bekræft metode
+# Én dataaftale: PUT opdaterer status og kommentar, DELETE sletter aftalen.
+STIL_DATAAFTALE_URL = (
+    "https://tilslutning.stil.dk/adm/api/dataejer/dataaftale/{aftale_id}"
+)
 
 # Cookies der udgør den faste session efter login.
 STIL_SESSION_COOKIES = ("SESSION", "stil_generic_persist", "XSRF-TOKEN")
@@ -71,18 +72,26 @@ THROTTLE_PAUSE_SECONDS = 30
 # Status mapping
 # ----------------------
 # Reference prefix (from the queue reference / Excel) -> STIL API status value.
+# GODKENDT, VENTER og AFVIST sættes med PUT; SLETTET betyder at aftalen slettes
+# med DELETE.
+STATUS_DELETED = "SLETTET"
 SET_STATUS_MAP = {
     "Godkend": "GODKENDT",
     "Vent": "VENTER",
-    "Slet": "SLETTET",
+    "Afvis": "AFVIST",
+    "Slet": STATUS_DELETED,
 }
 
 # Excel "statusændring" cell value -> reference prefix used to build queue references.
 EXCEL_CHANGE_TO_REFERENCE = {
     "GODKEND": "Godkend",
     "VENT": "Vent",
+    "AFVIS": "Afvis",
     "SLET": "Slet",
 }
+
+# Valgmulighederne i rullelisten i overbliks-arkets "statusændring"-kolonne.
+EXCEL_CHANGE_OPTIONS = tuple(EXCEL_CHANGE_TO_REFERENCE)
 
 # ----------------------
 # Filesystem layout

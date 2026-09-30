@@ -47,7 +47,9 @@ Dobbeltklik **`start-dataaftaler.bat`**.
    `Output` i den mappe, der er valgt under Opsætning. Den fulde sti
    vises i historikken (*"Overblik gemt: …"*).
 2. Åbn arket (knappen **Åbn regneark** eller direkte i `Output`-mappen), vælg
-   `GODKEND` / `SLET` / `VENT` i kolonnen `statusændring`, og **gem filen samme
+   `GODKEND` / `VENT` / `AFVIS` / `SLET` i kolonnen `statusændring`, skriv evt.
+   en kommentar i kolonnen `kommentar` lige til højre (bruges ikke ved `SLET`),
+   og **gem filen samme
    sted** (overskriv – lad være med at omdøbe eller flytte den, og slet ikke
    kolonner).
 3. **Indlæs ændringer & kør** – programmet læser det reviderede ark fra netop

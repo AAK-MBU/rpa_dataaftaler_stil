@@ -14,7 +14,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Reference prefix -> summary key for completed items.
-PREFIX_TO_KEY = {"Godkend": "godkendt", "Vent": "venter", "Slet": "slettet"}
+PREFIX_TO_KEY = {
+    "Godkend": "godkendt",
+    "Vent": "venter",
+    "Afvis": "afvist",
+    "Slet": "slettet",
+}
 
 
 def _classify(status: str) -> str:
@@ -38,6 +43,7 @@ def format_summary_message(summary: dict, unit: str = "kø-elementer") -> str:
         f"{summary['godkendt']} aftaler godkendt, "
         f"{summary['slettet']} slettet, "
         f"{summary['venter']} sat til venter, "
+        f"{summary['afvist']} afvist, "
         f"{summary['fejlet']} fejlet, "
         f"{summary['afventer_bruger']} afventer bruger "
         f"(i alt {summary['i_alt']} {unit})."
@@ -57,6 +63,7 @@ def finalize_process(
     summary = {
         "godkendt": 0,
         "venter": 0,
+        "afvist": 0,
         "slettet": 0,
         "fejlet": 0,
         "afventer_bruger": 0,

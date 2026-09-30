@@ -180,7 +180,7 @@ def run_local(
     ``config.MAX_RETRY`` changes have failed.
 
     Returns:
-        dict: Summary with the keys ``godkendt``, ``venter``, ``slettet``,
+        dict: Summary with the keys ``godkendt``, ``venter``, ``afvist``, ``slettet``,
         ``fejlet``, ``afventer_bruger`` and ``i_alt``.
     """
     reporter = reporter or NullReporter()
@@ -191,6 +191,7 @@ def run_local(
     summary = {
         "godkendt": 0,
         "venter": 0,
+        "afvist": 0,
         "slettet": 0,
         "fejlet": 0,
         "afventer_bruger": 0,

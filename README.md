@@ -16,12 +16,14 @@ Vinduet har to handlinger og lever op til fire feedback-krav:
 
 1. **Dann overblik (Excel)** – logger ind i STIL, henter alle dataaftaler for alle
    institutioner og skriver `Output/dataaftaler_oversigt_<dato>.xlsx` med en
-   `statusændring`-kolonne (dropdown: `GODKEND` / `SLET` / `VENT`). Medarbejderen
-   redigerer arket manuelt og vælger, hvad der skal ændres.
+   `statusændring`-kolonne (dropdown: `GODKEND` / `VENT` / `AFVIS` / `SLET`) og
+   en `kommentar`-kolonne lige til højre for den. Medarbejderen redigerer arket
+   manuelt og vælger, hvad der skal ændres.
 2. **Indlæs ændringer & kør** – læser det reviderede Excel-ark (ligger der flere
    i `Output`, vælges arket i en dialog med det senest ændrede øverst), logger ind i STIL
-   igen og gennemfører hver ændring (godkend / sæt til venter / slet), og viser
-   til sidst et resultat. Ved ATS lægges ændringerne først i Automation
+   igen og gennemfører hver ændring, og viser til sidst et resultat. Godkend,
+   venter og afvis sendes som statusændring (PUT) med kommentaren fra arket (tom
+   hvis cellen er tom); slet sletter aftalen (DELETE), og kommentaren bruges ikke. Ved ATS lægges ændringerne først i Automation
    Server-køen og behandles derfra; ved Lokalt køres de direkte.
 
 Knappen **Opsætning** åbner opsætningsdialogen (se nedenfor).

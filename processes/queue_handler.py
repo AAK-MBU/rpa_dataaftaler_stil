@@ -31,6 +31,19 @@ logger = logging.getLogger(__name__)
 # risk – we validate up front and tell them exactly what is missing.
 REQUIRED_COLUMNS = ("Instregnr", "status", "statusændring", "systemNavn", "serviceNavn")
 
+# Valgfri fritekst-kolonne; mangler den (ældre ark), sendes en tom kommentar.
+COMMENT_COLUMN = "kommentar"
+
+# Kolonnerne der identificerer en ændring og indgår i referencens hash.
+_IDENTITY_COLUMNS = ["Instregnr", "systemNavn", "serviceNavn", "status"]
+
+
+def clean_comment(value) -> str:
+    """Returnér kommentaren fra en Excel-celle som tekst; tom celle giver ``""``."""
+    if value is None or pd.isna(value):
+        return ""
+    return str(value).strip()
+
 
 def clean_instregnr(instregnr) -> str:
     """Remove any decimal point and trailing digits from an Instregnr value."""
@@ -107,7 +120,9 @@ def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]
     """Read a reviewed overview sheet and build queue items.
 
     Only rows whose ``statusændring`` requests a change to a *different* status
-    are included.
+    are included. Each item's ``data`` holds ``Instregnr``, ``systemNavn``,
+    ``serviceNavn``, ``status`` and ``kommentar`` (``""`` when the cell or the
+    column is empty); the reference hash covers everything but ``kommentar``.
 
     Args:
         excel_path: Det ark, der skal læses. Uden sti bruges det eneste
@@ -150,6 +165,8 @@ def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]
         )
 
     df["Instregnr"] = df["Instregnr"].apply(clean_instregnr)
+    if COMMENT_COLUMN not in df.columns:
+        df[COMMENT_COLUMN] = ""
 
     items: list[dict] = []
     for change_value, ref_prefix in config.EXCEL_CHANGE_TO_REFERENCE.items():
@@ -157,14 +174,14 @@ def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]
         filtered = df[
             (df["statusændring"] == change_value) & (df["status"] != target_status)
         ]
-        records = (
-            filtered[["Instregnr", "systemNavn", "serviceNavn", "status"]]
-            .dropna()
-            .to_dict(orient="records")
-        )
+        records = filtered.dropna(subset=_IDENTITY_COLUMNS)[
+            [*_IDENTITY_COLUMNS, COMMENT_COLUMN]
+        ].to_dict(orient="records")
         for rec in records:
+            kommentar = clean_comment(rec.pop(COMMENT_COLUMN))
+            reference = f"{ref_prefix}_{generate_short_hash(rec)}"
             items.append(
-                {"reference": f"{ref_prefix}_{generate_short_hash(rec)}", "data": rec}
+                {"reference": reference, "data": {**rec, COMMENT_COLUMN: kommentar}}
             )
 
     items = _dedupe_references(items)

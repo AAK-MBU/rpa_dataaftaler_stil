@@ -10,8 +10,9 @@ import logging
 
 from mbu_rpa_core.exceptions import BusinessError, ProcessError
 
+from helpers import config
 from helpers.reporting import NullReporter, ProgressReporter
-from helpers.stil_api import get_data, get_status, update_status
+from helpers.stil_api import delete_agreement, get_data, get_status, update_status
 from processes.application_handler import get_app
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ def process_item(
     system_name = item_data["systemNavn"]
     service_name = item_data["serviceNavn"]
     current_status = item_data["status"]
+    # Kø-elementer oprettet før kommentar-kolonnen fandtes, har ingen kommentar.
+    kommentar = item_data.get("kommentar") or ""
     wanted_status = get_status(item_reference)
 
     if wanted_status is None:
@@ -70,8 +73,12 @@ def process_item(
             f"matcher ikke status fra kø-elementet ({current_status})"
         )
 
-    # TODO(HAR): hvis sletning ikke går via opdater_status, skal SLETTET have sit eget kald.
-    update_status(agreement, wanted_status, app.session)
+    if wanted_status == config.STATUS_DELETED:
+        delete_agreement(agreement, app.session)
+        reporter.log(f"{org_num}: {system_name}/{service_name} slettet.")
+        return
+
+    update_status(agreement, wanted_status, app.session, kommentar)
     reporter.log(
         f"{org_num}: {system_name}/{service_name} sat fra {current_status} "
         f"til {wanted_status}."

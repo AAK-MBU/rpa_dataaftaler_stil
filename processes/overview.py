@@ -2,7 +2,8 @@
 
 Logs into STIL, selects every organisation in turn, collects its data
 agreements and writes them to ``Output/dataaftaler_oversigt_<dato>.xlsx`` with a
-``statusændring`` dropdown (GODKEND / SLET / VENT). Progress and the API
+``statusændring`` dropdown (GODKEND / VENT / AFVIS / SLET) and a free-text
+``kommentar`` column next to it. Progress and the API
 throttle are surfaced through the reporter, and a stop/pause checkpoint runs
 once per organisation.
 
@@ -33,6 +34,7 @@ _COLS_LEFT = [
     "inst_navn",
     "status",
     "statusændring",
+    "kommentar",
     "systemNavn",
     "serviceNavn",
     "udbyderNavn",
@@ -135,6 +137,7 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
     """
     agreements_df = agreements_df.copy()
     agreements_df["statusændring"] = ""
+    agreements_df["kommentar"] = ""
 
     for col in _COLS_LEFT:
         if col not in agreements_df.columns:
@@ -153,7 +156,8 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
             status_cell = worksheet[f"C{row}"]
             statusaendring_cell = worksheet[f"D{row}"]  # 'statusændring' column
             if status_cell.value != "SLETTET":
-                dv = DataValidation(type="list", formula1='"GODKEND, SLET, VENT"')
+                options = ",".join(config.EXCEL_CHANGE_OPTIONS)
+                dv = DataValidation(type="list", formula1=f'"{options}"')
                 dv.error_title = "Ugyldigt input"
                 dv.error_message = "Vælg venligst en værdi fra rullelisten"
                 worksheet.add_data_validation(dv)
