@@ -1,6 +1,6 @@
 [project]
 name = "rpa-dataaftaler-stil"
-version = "2.0.0"
+version = "0.0.1"
 description = "Desktop RPA-løsning til at danne overblik over og opdatere dataaftaler i STIL, bygget på ATS-frameworket med et Tkinter-feedbackvindue."
 readme = "README.md"
 requires-python = ">=3.13"

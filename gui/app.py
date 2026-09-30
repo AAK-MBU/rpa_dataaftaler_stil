@@ -263,7 +263,14 @@ class DataaftalerApp:
         self.btn_overview.pack(side=tk.LEFT, padx=4)
 
         self.btn_run = ttk.Button(
-            controls, text="Indlæs ændringer & kør", command=self._start_full_run
+            controls,
+            text=(
+                "Indlæs ændringer & kør"
+                if config.APPLY_CHANGES_ENABLED
+                else "Indlæs ændringer & kør (ikke testet)"
+            ),
+            command=self._start_full_run,
+            state=tk.NORMAL if config.APPLY_CHANGES_ENABLED else tk.DISABLED,
         )
         self.btn_run.pack(side=tk.LEFT, padx=4)
 
@@ -289,6 +296,17 @@ class DataaftalerApp:
             controls, text="Opsætning", command=self._open_setup
         )
         self.btn_setup.pack(side=tk.RIGHT, padx=4)
+
+        if not config.APPLY_CHANGES_ENABLED:
+            ttk.Label(
+                self.root,
+                text=(
+                    "Indlæsning og opdatering af aftaler er slået fra i denne "
+                    "version – kun 'Dan overblik' er testet."
+                ),
+                foreground="gray",
+                padding=(10, 0, 10, 6),
+            ).pack(anchor=tk.W)
 
         progress = ttk.Frame(self.root, padding=(10, 0))
         progress.pack(fill=tk.X)
@@ -323,6 +341,8 @@ class DataaftalerApp:
         self._start_worker(self._overview_worker)
 
     def _start_full_run(self) -> None:
+        if not config.APPLY_CHANGES_ENABLED:
+            return
         if self.worker and self.worker.is_alive():
             messagebox.showinfo("Kører allerede", "En proces kører allerede.")
             return
@@ -516,7 +536,9 @@ class DataaftalerApp:
         run_state = tk.DISABLED if running else tk.NORMAL
         ctl_state = tk.NORMAL if running else tk.DISABLED
         self.btn_overview.config(state=run_state)
-        self.btn_run.config(state=run_state)
+        self.btn_run.config(
+            state=run_state if config.APPLY_CHANGES_ENABLED else tk.DISABLED
+        )
         self.btn_setup.config(state=run_state)
         self.btn_pause.config(state=ctl_state, text="Pause")
         self.btn_stop.config(state=ctl_state)

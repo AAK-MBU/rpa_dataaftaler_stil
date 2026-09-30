@@ -26,6 +26,10 @@ Vinduet har to handlinger og lever op til fire feedback-krav:
    hvis cellen er tom); slet sletter aftalen (DELETE), og kommentaren bruges ikke. Ved ATS lægges ændringerne først i Automation
    Server-køen og behandles derfra; ved Lokalt køres de direkte.
 
+> **Indlæs ændringer & kør** er slået fra i GUI'et (`config.APPLY_CHANGES_ENABLED =
+> False`), indtil PUT- og DELETE-kaldene er testet mod STIL. Kun **Dan overblik**
+> er testet.
+
 Knappen **Opsætning** åbner opsætningsdialogen (se nedenfor).
 
 Feedback i vinduet: **(1)** fremdriftslinje + fase, **(2)** historik der løbende
