@@ -23,16 +23,41 @@ RETRY_BASE_DELAY = 0.5  # seconds (exponential backoff)
 # ----------------------
 REQUEST_TIMEOUT = 10  # seconds
 
-# STIL tilslutning endpoints
+# STIL tilslutning endpoints.
+# Endpoints sat til None er endnu ikke fastlagt; kald mod dem rejser
+# NotImplementedError (se helpers.stil_api._require_url).
 STIL_LOGIN_URL = "https://tilslutning.stil.dk/tilslutning/login"
-STIL_ORGANISATIONER_URL = "https://tilslutning.stil.dk/tilslutningBE/organisationer"
-STIL_ACTIVE_ORG_URL = "https://tilslutning.stil.dk/tilslutningBE/active-organisation"
-STIL_HENT_ADGANG_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/hent"
-STIL_SLET_ADGANG_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/slet"
-STIL_SET_STATUS_URL = "https://tilslutning.stil.dk/dataadgangadmBE/api/adgang/setStatus"
+STIL_ORGANISATIONER_URL = "https://tilslutning.stil.dk/adm/api/bruger/organisationer"
+STIL_SKIFT_ORG_URL: str | None = (
+    "https://tilslutning.stil.dk/adm/api/bruger/skift-organisation"
+)
+STIL_DATAAFTALER_URL: str | None = (
+    "https://tilslutning.stil.dk/adm/api/dataejer/dataaftale"
+)
+STIL_DATAAFTALER_PAGE_SIZE = 300  # største sidestørrelse STIL tillader
 
-# Aarhus Kommune Lokal IdP organisation string used on the login page
-LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"
+# Organisationstyper fra organisationer-kaldet, der er dataejere og derfor
+# indgår i kørslen. UDBYDER er udeladt.
+STIL_ORG_TYPES = ("INSTITUTION", "DAGTILBUD", "RESTINSTITUTION")
+
+# Én dataaftale: PUT opdaterer status og kommentar, DELETE sletter aftalen.
+STIL_DATAAFTALE_URL = (
+    "https://tilslutning.stil.dk/adm/api/dataejer/dataaftale/{aftale_id}"
+)
+
+# Cookies der udgør den faste session efter login.
+STIL_SESSION_COOKIES = ("SESSION", "stil_generic_persist", "XSRF-TOKEN")
+
+# Lokal IdP-organisation der vælges på STIL's loginside. Teksten skal svare
+# præcis til en linje i listen på loginsiden ("<navn>, <CVR>, <navn>").
+# Sættes i opsætningsdialogen som env LOGIN_ORGANISATION.
+DEFAULT_LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"
+
+
+def get_login_organisation() -> str:
+    """Returnér IdP-organisationen fra env ``LOGIN_ORGANISATION`` eller standardværdien."""
+    return (os.getenv("LOGIN_ORGANISATION") or "").strip() or DEFAULT_LOGIN_ORGANISATION
+
 
 # Login flow waits (seconds)
 LOGIN_PAGE_TIMEOUT = 60
@@ -47,29 +72,56 @@ THROTTLE_PAUSE_SECONDS = 30
 # Status mapping
 # ----------------------
 # Reference prefix (from the queue reference / Excel) -> STIL API status value.
+# GODKENDT, VENTER og AFVIST sættes med PUT; SLETTET betyder at aftalen slettes
+# med DELETE.
+STATUS_DELETED = "SLETTET"
 SET_STATUS_MAP = {
     "Godkend": "GODKENDT",
     "Vent": "VENTER",
-    "Slet": "SLETTET",
+    "Afvis": "AFVIST",
+    "Slet": STATUS_DELETED,
 }
 
 # Excel "statusændring" cell value -> reference prefix used to build queue references.
 EXCEL_CHANGE_TO_REFERENCE = {
     "GODKEND": "Godkend",
     "VENT": "Vent",
+    "AFVIS": "Afvis",
     "SLET": "Slet",
 }
+
+# Valgmulighederne i rullelisten i overbliks-arkets "statusændring"-kolonne.
+EXCEL_CHANGE_OPTIONS = tuple(EXCEL_CHANGE_TO_REFERENCE)
 
 # ----------------------
 # Filesystem layout
 # ----------------------
+# CODE_DIR er mappen med koden (repoets rod, eller app\ i en release-zip).
+CODE_DIR = Path(__file__).resolve().parent.parent
+
+# En release-zip har strukturen Dataaftaler\<OUTER_LAUNCHER_NAME> + Dataaftaler\app\
+# (se .github/workflows/release.yml). INSTALL_DIR er den yderste mappe, når
+# programmet kører fra en sådan pakke, ellers None (fx i et git-checkout).
+OUTER_LAUNCHER_NAME = "Start Dataaftaler.bat"
+INSTALL_DIR: Path | None = (
+    CODE_DIR.parent if (CODE_DIR.parent / OUTER_LAUNCHER_NAME).is_file() else None
+)
+
+# GitHub-repoet hvis releases programmet opdaterer sig fra (helpers/updater.py).
+GITHUB_REPO = "AAK-MBU/rpa_dataaftaler_stil"
+
 # Base directory for input/output files. Overridable via the BASE_DIR env var so the
-# desktop user can point it at a shared/synced folder. Defaults to the repo root.
-_DEFAULT_BASE_DIR = Path(__file__).resolve().parent.parent
+# desktop user can point it at a shared/synced folder. Defaults to the outer
+# install folder of a release, otherwise the code folder.
+_DEFAULT_BASE_DIR = INSTALL_DIR or CODE_DIR
+
+# Programmets egne indstillinger (ATS, driftsform, BASE_DIR) ligger i .env i
+# kodemappen. Opsætningsdialogen i gui/setup_wizard.py skriver til den.
+ENV_PATH = CODE_DIR / ".env"
 
 
 def get_base_dir() -> Path:
-    """Return the configured base directory for files (env BASE_DIR or repo root)."""
+    """Return the configured base directory for files (env BASE_DIR or the default)."""
     return Path(os.getenv("BASE_DIR", str(_DEFAULT_BASE_DIR)))
 
 
@@ -85,6 +137,22 @@ def get_log_dir() -> Path:
     log_dir = get_output_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
+
+
+# ----------------------
+# Driftsform
+# ----------------------
+# RUN_MODE=ATS: ændringerne lægges i Automation Server-arbejdskøen og behandles
+# derfra. RUN_MODE=LOKAL: ændringerne fra overbliks-arket køres direkte uden kø.
+RUN_MODE_ATS = "ATS"
+RUN_MODE_LOCAL = "LOKAL"
+RUN_MODES = (RUN_MODE_ATS, RUN_MODE_LOCAL)
+
+
+def get_run_mode() -> str | None:
+    """Returnér driftsformen fra env ``RUN_MODE``, eller None hvis den ikke er gyldig."""
+    mode = (os.getenv("RUN_MODE") or "").strip().upper()
+    return mode if mode in RUN_MODES else None
 
 
 # ----------------------
@@ -112,3 +180,7 @@ SEND_ERROR_EMAILS = os.getenv("SEND_ERROR_EMAILS", "false").lower() == "true"
 # GUI settings
 # ----------------------
 GUI_POLL_MS = 100  # how often the Tkinter loop drains the worker event queue
+
+# "Indlæs ændringer & kør" (statusændring og sletning via PUT/DELETE) er slået
+# fra i GUI'et, indtil de kald er testet mod STIL. Kun "Dan overblik" er testet.
+APPLY_CHANGES_ENABLED = False

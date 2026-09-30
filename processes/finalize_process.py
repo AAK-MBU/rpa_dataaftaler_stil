@@ -14,7 +14,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Reference prefix -> summary key for completed items.
-_PREFIX_TO_KEY = {"Godkend": "godkendt", "Vent": "venter", "Slet": "slettet"}
+PREFIX_TO_KEY = {
+    "Godkend": "godkendt",
+    "Vent": "venter",
+    "Afvis": "afvist",
+    "Slet": "slettet",
+}
 
 
 def _classify(status: str) -> str:
@@ -29,15 +34,19 @@ def _classify(status: str) -> str:
     return "andet"
 
 
-def format_summary_message(summary: dict) -> str:
-    """Build the Danish end-result message shown to the user."""
+def format_summary_message(summary: dict, unit: str = "kø-elementer") -> str:
+    """Build the Danish end-result message shown to the user.
+
+    ``unit`` names what ``i_alt`` counts, e.g. ``"kø-elementer"`` or ``"ændringer"``.
+    """
     return (
         f"{summary['godkendt']} aftaler godkendt, "
         f"{summary['slettet']} slettet, "
         f"{summary['venter']} sat til venter, "
+        f"{summary['afvist']} afvist, "
         f"{summary['fejlet']} fejlet, "
         f"{summary['afventer_bruger']} afventer bruger "
-        f"(i alt {summary['i_alt']} kø-elementer)."
+        f"(i alt {summary['i_alt']} {unit})."
     )
 
 
@@ -54,6 +63,7 @@ def finalize_process(
     summary = {
         "godkendt": 0,
         "venter": 0,
+        "afvist": 0,
         "slettet": 0,
         "fejlet": 0,
         "afventer_bruger": 0,
@@ -63,7 +73,7 @@ def finalize_process(
     for ref, row in rows.items():
         outcome = _classify(str(row.get("status", "")))
         if outcome == "completed":
-            key = _PREFIX_TO_KEY.get(ref.split("_")[0])
+            key = PREFIX_TO_KEY.get(ref.split("_")[0])
             if key:
                 summary[key] += 1
         elif outcome in ("fejlet", "afventer_bruger"):

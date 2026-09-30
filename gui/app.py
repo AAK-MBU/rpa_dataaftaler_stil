@@ -9,6 +9,10 @@ shows live feedback while it runs:
 3. **Pause / Stop** – cooperative controls honoured at every checkpoint.
 4. **End result** – a Danish summary ("X aftaler godkendt, Y slettet, ...").
 
+On first start (no valid ``RUN_MODE`` in ``.env``) the setup wizard in
+:mod:`gui.setup_wizard` is shown before the main window; the "Opsætning" button
+opens it again later.
+
 The process runs on a worker thread; it communicates back via a thread-safe queue
 that the Tk main loop drains. The worker never touches Tk widgets directly.
 """
@@ -17,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
 import queue
@@ -31,13 +36,20 @@ from zoneinfo import ZoneInfo
 
 from automation_server_client import AutomationServer
 from dotenv import load_dotenv
+from PIL import Image, ImageTk
 
-from helpers import config
+from gui.overview_picker import pick_overview_file
+from gui.setup_wizard import run_setup_wizard
+from helpers import config, settings, updater
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
-from main import finalize, populate_queue, process_workqueue
+from main import finalize, populate_queue, process_workqueue, run_local
 from processes.overview import run_overview
+from processes.queue_handler import find_overview_files, is_file_open
 
 logger = logging.getLogger(__name__)
+
+# Delay after the event loop starts before the launcher is told the window is up.
+_READY_SIGNAL_DELAY_MS = 300
 
 
 def _open_in_default_app(path: str) -> None:
@@ -107,14 +119,46 @@ def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     root_logger.addHandler(file_handler)
 
 
+def _set_window_icon(root: tk.Tk) -> None:
+    """Use app.ico for the title-bar icon and the Windows taskbar icon."""
+    ico = Path(__file__).resolve().parent.parent / "app.ico"
+    if not ico.exists():
+        return
+    # Give the process its own identity so Windows uses our icon on the
+    # taskbar (not the generic pythonw icon) when launched windowless.
+    if sys.platform.startswith("win"):
+        with contextlib.suppress(Exception):
+            import ctypes  # noqa: PLC0415
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "aarhus.kommune.dataaftaler.stil"
+            )
+    # `default=` applies the icon to this window and future dialogs too.
+    try:
+        root.iconbitmap(default=str(ico))
+    except tk.TclError:
+        logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
+    # iconbitmap alone makes Windows upscale a small frame for the taskbar.
+    # Passing every size in app.ico lets Windows pick a sharp one for both the
+    # title bar and the taskbar.
+    try:
+        with Image.open(ico) as icon:
+            sizes = sorted(icon.info.get("sizes", {icon.size}), reverse=True)
+            photos = [ImageTk.PhotoImage(icon.ico.getimage(size)) for size in sizes]
+        root.iconphoto(True, *photos)
+        # Tk does not keep a reference; without this the images are garbage collected.
+        root._icon_photos = photos  # type: ignore[attr-defined]
+    except (OSError, tk.TclError):
+        logger.debug("Kunne ikke sætte ikon i flere størrelser", exc_info=True)
+
+
 class DataaftalerApp:
     """The main Tkinter application window."""
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Dataaftaler – STIL")
+        self.root.title(f"Dataaftaler – STIL (v{updater.installed_version()})")
         self.root.geometry("820x600")
-        self._set_window_icon()
 
         # Worker <-> GUI plumbing
         self.event_queue: queue.Queue[ReporterEvent] = queue.Queue()
@@ -131,26 +175,82 @@ class DataaftalerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(config.GUI_POLL_MS, self._drain_events)
+        if updater.updates_enabled():
+            self._run_in_background(updater.check_for_update, self._on_update_checked)
 
-    def _set_window_icon(self) -> None:
-        """Use app.ico for the title-bar icon and the Windows taskbar icon."""
-        ico = Path(__file__).resolve().parent.parent / "app.ico"
-        if not ico.exists():
+    # --------------------------------------------------------------- update
+    def _run_in_background(self, func, on_done) -> None:
+        """Kør ``func`` på en tråd og kald ``on_done(result, error)`` på Tk-tråden."""
+        result: queue.Queue[tuple[object, BaseException | None]] = queue.Queue()
+
+        def target() -> None:
+            try:
+                result.put((func(), None))
+            except Exception as e:  # rapporteres via on_done
+                result.put((None, e))
+
+        def poll() -> None:
+            try:
+                value, error = result.get_nowait()
+            except queue.Empty:
+                self.root.after(config.GUI_POLL_MS, poll)
+                return
+            on_done(value, error)
+
+        threading.Thread(target=target, daemon=True).start()
+        self.root.after(config.GUI_POLL_MS, poll)
+
+    def _on_update_checked(self, release, error) -> None:
+        if error is not None:
+            logger.info("Opdateringstjek fejlede: %s", error)
             return
-        # Give the process its own identity so Windows uses our icon on the
-        # taskbar (not the generic pythonw icon) when launched windowless.
-        if sys.platform.startswith("win"):
-            with contextlib.suppress(Exception):
-                import ctypes  # noqa: PLC0415
+        if release is None:
+            return
+        if self.worker and self.worker.is_alive():
+            self.reporter.log(
+                f"Version {release.version} er tilgængelig. Genstart programmet "
+                "for at opdatere."
+            )
+            return
+        if not messagebox.askyesno(
+            "Ny version",
+            f"Version {release.version} er tilgængelig "
+            f"(du har {updater.installed_version()}).\n\n"
+            "Vil du opdatere nu? Programmet genstarter bagefter.",
+        ):
+            self.reporter.log(f"Opdatering til version {release.version} udskudt.")
+            return
+        self.reporter.log(f"Henter version {release.version}...")
+        for button in (self.btn_overview, self.btn_run, self.btn_setup):
+            button.config(state=tk.DISABLED)
+        self.root.config(cursor="watch")
+        self._run_in_background(
+            lambda: updater.apply_update(release), self._on_update_applied
+        )
 
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                    "aarhus.kommune.dataaftaler.stil"
-                )
-        # `default=` applies the icon to this window and future dialogs too.
+    def _on_update_applied(self, _result, error) -> None:
+        self.root.config(cursor="")
+        if error is not None:
+            logger.error("Opdatering fejlede: %s", error)
+            messagebox.showerror(
+                "Opdatering fejlede",
+                "Opdateringen kunne ikke gennemføres, og den nuværende version "
+                f"bruges fortsat.\n\n(Teknisk: {error})",
+            )
+            self._set_running_state(False)
+            return
+        messagebox.showinfo(
+            "Opdateret", "Opdateringen er installeret. Programmet genstarter nu."
+        )
         try:
-            self.root.iconbitmap(default=str(ico))
-        except tk.TclError:
-            logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
+            updater.restart()
+        except OSError as e:
+            logger.exception("Kunne ikke genstarte programmet")
+            messagebox.showwarning(
+                "Genstart",
+                f"Start programmet igen manuelt. (Teknisk: {e})",
+            )
+        self.root.destroy()
 
     # ------------------------------------------------------------------ UI
     def _build_widgets(self) -> None:
@@ -163,7 +263,14 @@ class DataaftalerApp:
         self.btn_overview.pack(side=tk.LEFT, padx=4)
 
         self.btn_run = ttk.Button(
-            controls, text="Indlæs ændringer & kør", command=self._start_full_run
+            controls,
+            text=(
+                "Indlæs ændringer & kør"
+                if config.APPLY_CHANGES_ENABLED
+                else "Indlæs ændringer & kør (ikke testet)"
+            ),
+            command=self._start_full_run,
+            state=tk.NORMAL if config.APPLY_CHANGES_ENABLED else tk.DISABLED,
         )
         self.btn_run.pack(side=tk.LEFT, padx=4)
 
@@ -178,9 +285,28 @@ class DataaftalerApp:
         self.btn_stop.pack(side=tk.LEFT, padx=4)
 
         self.btn_open = ttk.Button(
-            controls, text="Åbn regneark", command=self._open_overview, state=tk.DISABLED
+            controls,
+            text="Åbn regneark",
+            command=self._open_overview,
+            state=tk.DISABLED,
         )
         self.btn_open.pack(side=tk.LEFT, padx=4)
+
+        self.btn_setup = ttk.Button(
+            controls, text="Opsætning", command=self._open_setup
+        )
+        self.btn_setup.pack(side=tk.RIGHT, padx=4)
+
+        if not config.APPLY_CHANGES_ENABLED:
+            ttk.Label(
+                self.root,
+                text=(
+                    "Indlæsning og opdatering af aftaler er slået fra i denne "
+                    "version – kun 'Dan overblik' er testet."
+                ),
+                foreground="gray",
+                padding=(10, 0, 10, 6),
+            ).pack(anchor=tk.W)
 
         progress = ttk.Frame(self.root, padding=(10, 0))
         progress.pack(fill=tk.X)
@@ -215,7 +341,48 @@ class DataaftalerApp:
         self._start_worker(self._overview_worker)
 
     def _start_full_run(self) -> None:
-        self._start_worker(self._full_run_worker)
+        if not config.APPLY_CHANGES_ENABLED:
+            return
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Kører allerede", "En proces kører allerede.")
+            return
+        excel_path = self._choose_overview_file()
+        if excel_path is None or not self._confirm_file_closed(excel_path):
+            return
+        self._start_worker(functools.partial(self._full_run_worker, excel_path))
+
+    def _confirm_file_closed(self, excel_path: Path) -> bool:
+        """Warn while ``excel_path`` is open in Excel; True once it can be read.
+
+        Returns False if the user cancels.
+        """
+        while is_file_open(excel_path):
+            if not messagebox.askretrycancel(
+                "Arket er åbent",
+                f"Regnearket '{excel_path.name}' er åbent i Excel og kan ikke "
+                "læses.\n\nGem og luk arket i Excel, og tryk derefter "
+                "'Prøv igen'.",
+                icon=messagebox.WARNING,
+            ):
+                return False
+        return True
+
+    def _choose_overview_file(self) -> Path | None:
+        """Find the overview sheet to load; ask the user when there are several.
+
+        Returns None when there is no sheet or the user cancels.
+        """
+        files = find_overview_files()
+        if not files:
+            messagebox.showwarning(
+                "Intet overbliks-ark",
+                "Der ligger ikke noget overbliks-ark i mappen:\n"
+                f"{config.get_output_dir()}\n\nDan overblikket først.",
+            )
+            return None
+        if len(files) == 1:
+            return files[0]
+        return pick_overview_file(self.root, files)
 
     def _start_worker(self, target) -> None:
         if self.worker and self.worker.is_alive():
@@ -232,6 +399,18 @@ class DataaftalerApp:
         self.worker = threading.Thread(target=target, daemon=True)
         self._set_running_state(True)
         self.worker.start()
+
+    def _open_setup(self) -> None:
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(
+                "Kører", "Opsætningen kan ikke ændres, mens en proces kører."
+            )
+            return
+        if run_setup_wizard(self.root):
+            self.reporter.log(
+                f"Opsætning gemt. Driftsform: {config.get_run_mode()}. "
+                f"Output: {config.get_output_dir()}"
+            )
 
     def _toggle_pause(self) -> None:
         if self.pause_event.is_set():
@@ -261,13 +440,17 @@ class DataaftalerApp:
         finally:
             self.reporter.done("Overblik afsluttet.")
 
-    def _full_run_worker(self) -> None:
+    def _full_run_worker(self, excel_path: Path) -> None:
         try:
+            if config.get_run_mode() == config.RUN_MODE_LOCAL:
+                run_local(self.reporter, excel_path)
+                return
+
             missing = config.missing_ats_env()
             if missing:
                 raise ValueError(
-                    "Automation Server er ikke konfigureret. Følgende mangler i "
-                    f".env: {', '.join(missing)}. Udfyld dem og start igen."
+                    "Automation Server er ikke konfigureret. Følgende mangler: "
+                    f"{', '.join(missing)}. Udfyld dem under Opsætning."
                 )
             try:
                 ats = AutomationServer.from_environment()
@@ -275,11 +458,11 @@ class DataaftalerApp:
             except Exception as e:
                 raise ValueError(
                     "Kunne ikke oprette forbindelse til Automation Server. "
-                    "Tjek ATS_URL, ATS_TOKEN og ATS_WORKQUEUE_OVERRIDE i .env. "
+                    "Tjek URL, token og workqueue-ID under Opsætning. "
                     f"(Teknisk: {e})"
                 ) from e
 
-            asyncio.run(populate_queue(workqueue, self.reporter))
+            asyncio.run(populate_queue(workqueue, self.reporter, excel_path))
             asyncio.run(process_workqueue(workqueue, self.reporter))
             asyncio.run(finalize(workqueue, self.reporter))
         except StopRequested:
@@ -353,14 +536,15 @@ class DataaftalerApp:
         run_state = tk.DISABLED if running else tk.NORMAL
         ctl_state = tk.NORMAL if running else tk.DISABLED
         self.btn_overview.config(state=run_state)
-        self.btn_run.config(state=run_state)
+        self.btn_run.config(
+            state=run_state if config.APPLY_CHANGES_ENABLED else tk.DISABLED
+        )
+        self.btn_setup.config(state=run_state)
         self.btn_pause.config(state=ctl_state, text="Pause")
         self.btn_stop.config(state=ctl_state)
         # The "open spreadsheet" button is available while idle once an overview
         # has been produced this session.
-        open_state = (
-            tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
-        )
+        open_state = tk.NORMAL if (not running and self.overview_path) else tk.DISABLED
         self.btn_open.config(state=open_state)
 
     def _open_overview(self) -> None:
@@ -388,11 +572,39 @@ class DataaftalerApp:
         self.root.destroy()
 
 
+def _signal_ready() -> None:
+    """Opret filen i env ``DATAAFTALER_READY_FILE``, så launcheren kan lukke.
+
+    ``start-dataaftaler.bat`` venter på filen og viser ventebeskeder, indtil
+    programmets første vindue (opsætning eller hovedvindue) er vist.
+    """
+    path = os.environ.pop("DATAAFTALER_READY_FILE", None)
+    if not path:
+        return
+    try:
+        Path(path).write_text("ready", encoding="utf-8")
+    except OSError:
+        logger.debug("Kunne ikke skrive klar-signal til launcheren", exc_info=True)
+
+
 def main() -> None:
     """Launch the desktop application."""
     # Load .env before anything reads config (BASE_DIR drives the Output/log dirs).
-    load_dotenv()
+    load_dotenv(config.ENV_PATH)
     root = tk.Tk()
+    _set_window_icon(root)
+    # Runs from the event loop once the first window (wizard or main) is drawn.
+    root.after(_READY_SIGNAL_DELAY_MS, _signal_ready)
+
+    if not settings.is_configured():
+        # First start: the setup has to be saved before the main window (and
+        # its log file under BASE_DIR) is created.
+        root.withdraw()
+        if not run_setup_wizard(root):
+            root.destroy()
+            return
+        root.deiconify()
+
     DataaftalerApp(root)
     root.mainloop()
 

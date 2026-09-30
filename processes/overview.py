@@ -1,10 +1,11 @@
 """Create the Dataaftaler overview Excel (the human-review artifact).
 
-Ported from the legacy ``overview_creation.py``. Logs into STIL, walks every
-organisation, collects its data agreements and writes them to
-``Output/dataaftaler_oversigt_<dato>.xlsx`` with a ``statusændring`` dropdown
-(GODKEND / SLET / VENT). Progress and the API throttle are surfaced through the
-reporter, and a stop/pause checkpoint runs once per organisation.
+Logs into STIL, selects every organisation in turn, collects its data
+agreements and writes them to ``Output/dataaftaler_oversigt_<dato>.xlsx`` with a
+``statusændring`` dropdown (GODKEND / VENT / AFVIS / SLET) and a free-text
+``kommentar`` column next to it. Progress and the API
+throttle are surfaced through the reporter, and a stop/pause checkpoint runs
+once per organisation.
 
 This is *not* a workqueue phase – it produces the spreadsheet the user reviews
 before the queue is populated.
@@ -20,20 +21,11 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from openpyxl.worksheet.datavalidation import DataValidation
-from requests import Session
 
 from helpers import config
 from helpers.reporting import NullReporter, ProgressReporter
-from helpers.stil_api import (
-    flatten_dict,
-    get_base_cookies,
-    get_browser_cookie,
-    get_data,
-    get_org,
-    get_org_dict,
-    get_request_cookie,
-    open_stil_connection,
-)
+from helpers.stil_api import flatten_dict, get_data
+from processes.application_handler import close, startup
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +34,15 @@ _COLS_LEFT = [
     "inst_navn",
     "status",
     "statusændring",
+    "kommentar",
     "systemNavn",
-    "systemBeskrivelse",
     "serviceNavn",
     "udbyderNavn",
-    "Kontaktperson",
 ]
 
 _COLS_RENAME = {
-    "inst_kode": "Instregnr",
-    "aktuelStatus": "status",
-    "stilService_servicenavn": "serviceNavn",
-    "udbydersystem_navn": "systemNavn",
-    "udbydersystem_beskrivelse": "systemBeskrivelse",
-    "udbyder_navn": "udbyderNavn",
-    "udbydersystem_kontaktNavn": "Kontaktperson",
+    "aftaleStatus": "status",
+    "udbydersystemNavn": "systemNavn",
 }
 
 
@@ -66,24 +52,11 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
     Returns the path of the written spreadsheet.
     """
     reporter = reporter or NullReporter()
-    reporter.phase("Dan overblik")
 
-    browser = open_stil_connection(reporter)
     try:
-        base_cookie, x_xsrf_token = get_base_cookies(browser)
-        cookie_inst_list = get_browser_cookie("AuthTokenTilslutning", browser)
-        session = Session()
-        session.headers.update(
-            {
-                "cookie": f"{base_cookie};{cookie_inst_list}",
-                "x-xsrf-token": x_xsrf_token,
-                "accept": "application/json",
-                "content-type": "application/json",
-                "Accept": "*/*",
-            }
-        )
-        org_dict = get_org_dict(session)
-        total = len(org_dict)
+        app = startup(reporter)
+        reporter.phase("Dan overblik")
+        total = len(app.org_dict)
         reporter.log(f"Henter aftaler fra {total} organisationer...")
 
         all_agreements: list[dict] = []
@@ -91,7 +64,7 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
         api_counter = 0
         window_start = time.monotonic()
 
-        for index, org in enumerate(org_dict.values()):
+        for index, org in enumerate(app.org_dict.values()):
             reporter.checkpoint()  # cooperative pause/stop point
 
             # Throttle: pause after THROTTLE_AFTER_CALLS calls inside the window.
@@ -113,11 +86,8 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
                 window_start = time.monotonic()
 
             org_num = org["kode"]
-            org_response = get_org(org_num, org_dict, session)
-            org_cookie = get_request_cookie("AuthTokenTilslutning", org_response)
-            session.headers.update({"Cookie": f"{base_cookie};{org_cookie}"})
-
-            agreements_raw = get_data(session, org_num)
+            app.activate(org_num)
+            agreements_raw = get_data(app.session, org_num)
             agreements = [flatten_dict(a) for a in agreements_raw.values()]
             if not agreements:
                 orgs_without_agr.append(org_num)
@@ -157,7 +127,7 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
         )
         return path
     finally:
-        browser.quit()
+        close()
 
 
 def store_overview(agreements_df: pd.DataFrame) -> str:
@@ -167,6 +137,7 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
     """
     agreements_df = agreements_df.copy()
     agreements_df["statusændring"] = ""
+    agreements_df["kommentar"] = ""
 
     for col in _COLS_LEFT:
         if col not in agreements_df.columns:
@@ -185,7 +156,8 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
             status_cell = worksheet[f"C{row}"]
             statusaendring_cell = worksheet[f"D{row}"]  # 'statusændring' column
             if status_cell.value != "SLETTET":
-                dv = DataValidation(type="list", formula1='"GODKEND, SLET, VENT"')
+                options = ",".join(config.EXCEL_CHANGE_OPTIONS)
+                dv = DataValidation(type="list", formula1=f'"{options}"')
                 dv.error_title = "Ugyldigt input"
                 dv.error_message = "Vælg venligst en værdi fra rullelisten"
                 worksheet.add_data_validation(dv)
