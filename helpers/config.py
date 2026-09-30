@@ -107,6 +107,9 @@ INSTALL_DIR: Path | None = (
     CODE_DIR.parent if (CODE_DIR.parent / OUTER_LAUNCHER_NAME).is_file() else None
 )
 
+# GitHub-repoet hvis releases programmet opdaterer sig fra (helpers/updater.py).
+GITHUB_REPO = "AAK-MBU/rpa_dataaftaler_stil"
+
 # Base directory for input/output files. Overridable via the BASE_DIR env var so the
 # desktop user can point it at a shared/synced folder. Defaults to the outer
 # install folder of a release, otherwise the code folder.

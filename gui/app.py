@@ -40,7 +40,7 @@ from PIL import Image, ImageTk
 
 from gui.overview_picker import pick_overview_file
 from gui.setup_wizard import run_setup_wizard
-from helpers import config, settings
+from helpers import config, settings, updater
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
 from main import finalize, populate_queue, process_workqueue, run_local
 from processes.overview import run_overview
@@ -157,7 +157,7 @@ class DataaftalerApp:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Dataaftaler – STIL")
+        self.root.title(f"Dataaftaler – STIL (v{updater.installed_version()})")
         self.root.geometry("820x600")
 
         # Worker <-> GUI plumbing
@@ -175,6 +175,82 @@ class DataaftalerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(config.GUI_POLL_MS, self._drain_events)
+        if updater.updates_enabled():
+            self._run_in_background(updater.check_for_update, self._on_update_checked)
+
+    # --------------------------------------------------------------- update
+    def _run_in_background(self, func, on_done) -> None:
+        """Kør ``func`` på en tråd og kald ``on_done(result, error)`` på Tk-tråden."""
+        result: queue.Queue[tuple[object, BaseException | None]] = queue.Queue()
+
+        def target() -> None:
+            try:
+                result.put((func(), None))
+            except Exception as e:  # rapporteres via on_done
+                result.put((None, e))
+
+        def poll() -> None:
+            try:
+                value, error = result.get_nowait()
+            except queue.Empty:
+                self.root.after(config.GUI_POLL_MS, poll)
+                return
+            on_done(value, error)
+
+        threading.Thread(target=target, daemon=True).start()
+        self.root.after(config.GUI_POLL_MS, poll)
+
+    def _on_update_checked(self, release, error) -> None:
+        if error is not None:
+            logger.info("Opdateringstjek fejlede: %s", error)
+            return
+        if release is None:
+            return
+        if self.worker and self.worker.is_alive():
+            self.reporter.log(
+                f"Version {release.version} er tilgængelig. Genstart programmet "
+                "for at opdatere."
+            )
+            return
+        if not messagebox.askyesno(
+            "Ny version",
+            f"Version {release.version} er tilgængelig "
+            f"(du har {updater.installed_version()}).\n\n"
+            "Vil du opdatere nu? Programmet genstarter bagefter.",
+        ):
+            self.reporter.log(f"Opdatering til version {release.version} udskudt.")
+            return
+        self.reporter.log(f"Henter version {release.version}...")
+        for button in (self.btn_overview, self.btn_run, self.btn_setup):
+            button.config(state=tk.DISABLED)
+        self.root.config(cursor="watch")
+        self._run_in_background(
+            lambda: updater.apply_update(release), self._on_update_applied
+        )
+
+    def _on_update_applied(self, _result, error) -> None:
+        self.root.config(cursor="")
+        if error is not None:
+            logger.error("Opdatering fejlede: %s", error)
+            messagebox.showerror(
+                "Opdatering fejlede",
+                "Opdateringen kunne ikke gennemføres, og den nuværende version "
+                f"bruges fortsat.\n\n(Teknisk: {error})",
+            )
+            self._set_running_state(False)
+            return
+        messagebox.showinfo(
+            "Opdateret", "Opdateringen er installeret. Programmet genstarter nu."
+        )
+        try:
+            updater.restart()
+        except OSError as e:
+            logger.exception("Kunne ikke genstarte programmet")
+            messagebox.showwarning(
+                "Genstart",
+                f"Start programmet igen manuelt. (Teknisk: {e})",
+            )
+        self.root.destroy()
 
     # ------------------------------------------------------------------ UI
     def _build_widgets(self) -> None:

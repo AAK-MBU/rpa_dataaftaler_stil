@@ -50,6 +50,17 @@ programvinduet direkte uden konsolvinduet med trinnene. Er programmet opdateret
 (ændret `uv.lock` eller `pyproject.toml`), vises konsolvinduet igen, mens
 afhængighederne opdateres.
 
+## Opdatering
+
+Når programmet starter, tjekker det, om der er en nyere version på GitHub. Er
+der det, spørger programmet, om det skal opdatere. Ved **Ja** hentes den nye
+version, programfilerne i `app` udskiftes, og programmet genstarter. Opsætningen
+(`.env`), `.venv` og `Output` bevares. Har den nye version ændrede afhængigheder,
+vises konsolvinduet med trinnene, mens de installeres.
+
+Går opdateringen galt, lægges de gamle filer tilbage, og den nuværende version
+bruges fortsat. Tjekket kan slås fra med `DATAAFTALER_NO_UPDATE=true` i `.env`.
+
 ## Daglig brug
 
 Dobbeltklik **`Start Dataaftaler.bat`** (eller genvejen).

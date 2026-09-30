@@ -107,6 +107,13 @@ i yderste mappe og koden i `app/` (et `git archive` af repoet; stier markeret
 pakke, er standardmappen til output den yderste mappe (`config.INSTALL_DIR`);
 `.env` og `.venv` ligger i `app/`.
 
+Programmet opdaterer sig selv fra den seneste release (`helpers/updater.py`):
+ved start slås `releases/latest` op i GitHub's API, og er versionen nyere end
+`version` i `pyproject.toml`, tilbydes en opdatering. Den erstatter indholdet af
+`app/` (undtagen `.venv`, `.env` og `Output`) og filerne i yderste mappe og
+genstarter via `Start Dataaftaler.bat`. Kører programmet fra et git-checkout
+(`config.INSTALL_DIR` er `None`), tjekkes der ikke.
+
 ## Arkitektur
 
 | Fil | Ansvar |
@@ -116,6 +123,8 @@ pakke, er standardmappen til output den yderste mappe (`config.INSTALL_DIR`);
 | `gui/overview_picker.py` | Dialog til at vælge overbliks-ark, når der er flere i `Output`. |
 | `main.py` | Faser (`populate_queue` / `process_workqueue` / `finalize`), `run_local` + `--overview`. Headless-indgang. |
 | `helpers/settings.py` | Læs/skriv opsætningen i `.env` og opret genvej. |
+| `helpers/updater.py` | Tjek for og installér nye versioner fra GitHub Releases. |
+| `packaging/` | Filer til release-zip'ens yderste mappe (launcher, LÆS MIG). |
 | `helpers/stil_api.py` | STIL login (Selenium) + REST-kald (requests). |
 | `helpers/reporting.py` | `ProgressReporter` (Null/Gui) + `StopRequested` – fælles fremdrift/afbrydelse. |
 | `helpers/config.py` | Konfiguration: endpoints, timeouts, status-mapping, stier. |
