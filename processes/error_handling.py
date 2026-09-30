@@ -9,9 +9,13 @@ from email.message import EmailMessage
 from io import BytesIO
 
 from automation_server_client import WorkItem
-from mbu_dev_shared_components.database.connection import RPAConnection
 from mbu_rpa_core.exceptions import BusinessError, ProcessError
-from PIL import ImageGrab
+
+from helpers import config
+
+# NOTE: RPAConnection (pyodbc) and PIL.ImageGrab are imported lazily inside the
+# email/screenshot functions so the desktop app can launch without an ODBC driver
+# or display. Error emails are off by default on the desktop (see SEND_ERROR_EMAILS).
 
 
 @dataclass
@@ -45,13 +49,16 @@ def handle_error(
     if context is None:
         context = ErrorContext()
     error_json = json.dumps(error.__dictinfo__())
-    log_msg = f"Error: {error}"
+    log_msg = f"Fejl: {error}"
     if context.item:
-        log_msg = f"{repr(error)} raised for item: {context.item}. " + log_msg
+        log_msg = f"{repr(error)} rejst for element: {context.item}. " + log_msg
         if context.action:
             context.action(error_json)
     log(log_msg)
-    if context.send_mail:
+    # On the desktop the DB-backed email path is off by default (no RPAConnection
+    # constants reachable); errors still surface in the GUI history + log file.
+    # Set SEND_ERROR_EMAILS=true (e.g. for headless/AS runs) to re-enable.
+    if context.send_mail and config.SEND_ERROR_EMAILS:
         send_error_email(
             error=error,
             add_screenshot=context.add_screenshot,
@@ -75,6 +82,10 @@ def send_error_email(
     Raises:
         Exception: If sending the email fails.
     """
+    from mbu_dev_shared_components.database.connection import (  # noqa: PLC0415
+        RPAConnection,
+    )
+
     rpa_conn = RPAConnection(db_env="PROD", commit=False)
     with rpa_conn:
         error_email = rpa_conn.get_constant("Error Email")["value"]
@@ -134,6 +145,8 @@ def grab_screenshot() -> str:
     Raises:
         Exception: If screenshot capture fails.
     """
+    from PIL import ImageGrab  # noqa: PLC0415
+
     # Take screenshot and convert to base64
     screenshot = ImageGrab.grab()
     buffer = BytesIO()

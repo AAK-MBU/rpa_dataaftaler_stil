@@ -1,25 +1,191 @@
-"""Module to hande queue population"""
+"""Queue population: read the reviewed Excel overview and build queue items.
+
+``find_overview_files`` lists the overview sheets in Output/ (newest first) and
+``retrieve_items_for_queue`` ports the legacy ``queue_upload.retrieve_changes``
++ reference/hash logic. Each returned item is ``{"reference": ..., "data": ...}``;
+``main.populate_queue`` then de-dupes against the live queue and ``concurrent_add``
+pushes them to the Automation Server workqueue.
+"""
+
+from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from automation_server_client import Workqueue
+import pandas as pd
 
 from helpers import config
 
+if TYPE_CHECKING:
+    from automation_server_client import Workqueue
+
 logger = logging.getLogger(__name__)
 
+# Columns the reviewed overview must still contain for the queue to be built.
+# The caseworker edits the sheet by hand, so a deleted/renamed column is a real
+# risk – we validate up front and tell them exactly what is missing.
+REQUIRED_COLUMNS = ("Instregnr", "status", "statusændring", "systemNavn", "serviceNavn")
 
-def retrieve_items_for_queue() -> list[dict]:
-    """Function to populate queue"""
-    data = []
-    references = []
+# Valgfri fritekst-kolonne; mangler den (ældre ark), sendes en tom kommentar.
+COMMENT_COLUMN = "kommentar"
 
-    items = [
-        {"reference": ref, "data": d} for ref, d in zip(references, data, strict=True)
+# Kolonnerne der identificerer en ændring og indgår i referencens hash.
+_IDENTITY_COLUMNS = ["Instregnr", "systemNavn", "serviceNavn", "status"]
+
+
+def clean_comment(value) -> str:
+    """Returnér kommentaren fra en Excel-celle som tekst; tom celle giver ``""``."""
+    if value is None or pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def clean_instregnr(instregnr) -> str:
+    """Remove any decimal point and trailing digits from an Instregnr value."""
+    return str(instregnr).split(".", maxsplit=1)[0]
+
+
+def generate_short_hash(data, length: int = 8) -> str:
+    """Generate a short, stable hash from a dict/string (used in references)."""
+    if isinstance(data, dict):
+        data = json.dumps(data, sort_keys=True)
+    return hashlib.md5(data.encode()).hexdigest()[:length]
+
+
+def _dedupe_references(items: list[dict]) -> list[dict]:
+    """Ensure references are unique by suffixing duplicates with an index."""
+    seen: dict[str, int] = {}
+    for item in items:
+        ref = item["reference"]
+        if ref in seen:
+            seen[ref] += 1
+            item["reference"] = f"{ref}_{seen[ref]}"
+            logger.info("Dublet-reference fundet, omdøbt til %s", item["reference"])
+        else:
+            seen[ref] = 0
+    return items
+
+
+def find_overview_files() -> list[Path]:
+    """Find overbliks-arkene (``*oversigt*.xlsx``) i Output-mappen.
+
+    Excels låsefiler (``~$...``), der ligger ved siden af et åbent ark, springes
+    over.
+
+    Returns:
+        list[Path]: Arkene sorteret efter senest ændret, nyeste først.
+    """
+    output_dir = config.get_output_dir()
+    # Case-insensitive match: the file is written lowercase ("...oversigt...") but
+    # we must not rely on the OS filesystem being case-insensitive.
+    files = [
+        f
+        for f in output_dir.glob("*.xlsx")
+        if "oversigt" in f.name.lower() and not f.name.startswith("~$")
     ]
+    return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
 
+
+def is_file_open(path: str | Path) -> bool:
+    """Returnér True hvis arket ser ud til at være åbent i Excel.
+
+    Excel lægger en låsefil (``~$`` + filnavnet, for lange navne uden de to
+    første tegn) ved siden af et åbent ark og spærrer arket for skriveadgang på
+    Windows. Begge dele tjekkes; filen ændres ikke.
+    """
+    path = Path(path)
+    lock_names = {f"~${path.name}", f"~${path.name[2:]}"}
+    if any((path.parent / name).exists() for name in lock_names):
+        return True
+    if not os.access(path, os.W_OK):
+        # Skrivebeskyttet fil: skriveadgang siger intet om Excel, og filen kan
+        # stadig læses.
+        return False
+    try:
+        with path.open("r+b"):
+            pass
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]:
+    """Read a reviewed overview sheet and build queue items.
+
+    Only rows whose ``statusændring`` requests a change to a *different* status
+    are included. Each item's ``data`` holds ``Instregnr``, ``systemNavn``,
+    ``serviceNavn``, ``status`` and ``kommentar`` (``""`` when the cell or the
+    column is empty); the reference hash covers everything but ``kommentar``.
+
+    Args:
+        excel_path: Det ark, der skal læses. Uden sti bruges det eneste
+            overbliks-ark fra :func:`find_overview_files`.
+
+    Raises ``ValueError`` with a user-facing Danish message if no sheet is given
+    and there is not exactly one overview file, the file cannot be read (e.g. it
+    is still open in Excel), or a required column has been deleted/renamed.
+    """
+    if excel_path is None:
+        excel_files = find_overview_files()
+        if len(excel_files) != 1:
+            names = ", ".join(f.name for f in excel_files)
+            raise ValueError(
+                "Der skal være præcis ét Oversigt-regneark i mappen "
+                f"'{config.get_output_dir()}', når arket ikke vælges i "
+                "programmet. Slet evt. gamle filer. "
+                f"Filer fundet: {names or '(ingen)'}"
+            )
+        excel_path = excel_files[0]
+
+    excel_path = Path(excel_path)
+    filename = excel_path.name
+    logger.info("Læser ændringer fra %s", excel_path)
+    try:
+        df = pd.read_excel(excel_path)
+    except Exception as e:
+        raise ValueError(
+            f"Kunne ikke læse regnearket '{filename}'. "
+            "Er filen stadig åben i Excel? Luk den og prøv igen."
+        ) from e
+
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Regnearket '{filename}' mangler nødvendige kolonner: "
+            f"{', '.join(missing)}. Disse kolonner må ikke slettes eller omdøbes. "
+            "Dan overblikket igen, eller gendan kolonnerne, og prøv igen. "
+            f"(Kolonner fundet: {', '.join(map(str, df.columns))})"
+        )
+
+    df["Instregnr"] = df["Instregnr"].apply(clean_instregnr)
+    if COMMENT_COLUMN not in df.columns:
+        df[COMMENT_COLUMN] = ""
+
+    items: list[dict] = []
+    for change_value, ref_prefix in config.EXCEL_CHANGE_TO_REFERENCE.items():
+        target_status = config.SET_STATUS_MAP[ref_prefix]
+        filtered = df[
+            (df["statusændring"] == change_value) & (df["status"] != target_status)
+        ]
+        records = filtered.dropna(subset=_IDENTITY_COLUMNS)[
+            [*_IDENTITY_COLUMNS, COMMENT_COLUMN]
+        ].to_dict(orient="records")
+        for rec in records:
+            kommentar = clean_comment(rec.pop(COMMENT_COLUMN))
+            reference = f"{ref_prefix}_{generate_short_hash(rec)}"
+            items.append(
+                {"reference": reference, "data": {**rec, COMMENT_COLUMN: kommentar}}
+            )
+
+    items = _dedupe_references(items)
+    logger.info("Antal ændringer i alt: %d", len(items))
     return items
 
 
@@ -56,13 +222,15 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
             for attempt in range(1, config.MAX_RETRIES + 1):
                 try:
                     await asyncio.to_thread(workqueue.add_item, data, reference)
-                    logger.info("Added item to queue with reference: %s", reference)
+                    logger.info(
+                        "Tilføjede element til køen med reference: %s", reference
+                    )
                     return True
 
                 except Exception as e:
                     if attempt >= config.MAX_RETRIES:
                         logger.error(
-                            "Failed to add item %s after %d attempts: %s",
+                            "Kunne ikke tilføje element %s efter %d forsøg: %s",
                             reference,
                             attempt,
                             e,
@@ -72,7 +240,8 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
                     backoff = config.RETRY_BASE_DELAY * (2 ** (attempt - 1))
 
                     logger.warning(
-                        "Error adding %s (attempt %d/%d). Retrying in %.2fs... %s",
+                        "Fejl ved tilføjelse af %s (forsøg %d/%d). "
+                        "Prøver igen om %.2fs... %s",
                         reference,
                         attempt,
                         config.MAX_RETRIES,
@@ -82,12 +251,13 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
                     await asyncio.sleep(backoff)
 
     if not items:
-        logger.info("No new items to add.")
+        logger.info("Ingen nye elementer at tilføje.")
         return
 
     sorted_items = sorted(items, key=create_sort_key)
     logger.info(
-        "Processing %d items sorted by complete JSON structure", len(sorted_items)
+        "Behandler %d elementer sorteret efter komplet JSON-struktur",
+        len(sorted_items),
     )
 
     results = await asyncio.gather(*(add_one(i) for i in sorted_items))
@@ -95,5 +265,8 @@ async def concurrent_add(workqueue: Workqueue, items: list[dict]) -> None:
     failures = len(results) - successes
 
     logger.info(
-        "Summary: %d succeeded, %d failed out of %d", successes, failures, len(results)
+        "Opsummering: %d lykkedes, %d fejlede ud af %d",
+        successes,
+        failures,
+        len(results),
     )

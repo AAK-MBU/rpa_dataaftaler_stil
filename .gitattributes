@@ -1,0 +1,12 @@
+# Windows batch and text files must keep CRLF line endings (also in git archive).
+*.bat text eol=crlf
+packaging/*.txt text eol=crlf
+
+# Not included in the release zip (git archive); see .github/workflows/release.yml.
+/.github export-ignore
+/workflows export-ignore
+/.claude export-ignore
+/packaging export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/app_main.py export-ignore

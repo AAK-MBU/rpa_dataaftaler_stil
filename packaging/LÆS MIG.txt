@@ -1,0 +1,13 @@
+Dataaftaler - STIL
+==================
+
+Start programmet ved at dobbeltklikke på "Start Dataaftaler.bat".
+
+Første gang installeres de nødvendige værktøjer (det tager lidt tid), og
+derefter åbner en opsætning, hvor du vælger driftsform, login og mappe til
+output. Opsætningen kan også oprette en genvej på skrivebordet.
+
+Mappen "app" indeholder selve programmet og dine indstillinger (.env).
+Den skal ikke ændres manuelt.
+
+Kræver: Windows, Google Chrome, Git og internetadgang.

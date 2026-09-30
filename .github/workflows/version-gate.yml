@@ -1,0 +1,199 @@
+name: version-gate
+
+# Gate on PRs into main (i.e. dev -> main): the release that main auto-cuts is
+# driven by pyproject's [project].version, so main must never be merged with a
+# version that isn't above the current main. When the PR head (dev) version is
+# NOT greater than main's, this check fails AND posts a sticky comment in the PR
+# conversation asking for a bump type via a label — add exactly one of:
+# major / minor / bugfix. On a label, CI computes main+increment, writes it into
+# pyproject.toml on the head branch, and pushes; the version is then > main and
+# the gate passes, so merging to main releases it.
+#
+# NOTE: for the auto-bump push to re-trigger this check on the new head commit
+# (so branch protection sees it green), add a repo secret GATE_PAT — a
+# fine-grained PAT with contents:write + pull-requests:read on this repo. Without
+# it the bump is still pushed, but you must re-run the check (the built-in
+# GITHUB_TOKEN cannot trigger a follow-up workflow run). Mark "version-gate"
+# as a required status check on main's branch protection for it to block merges.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: version-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # push the auto-bump commit to the head branch
+  pull-requests: write # post/update the sticky conversation comment
+  issues: write # PR comments go through the issues API
+
+jobs:
+  version-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GATE_PAT || github.token }}
+
+      - name: Decide bump
+        id: decide
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin "$BASE_REF"
+          git show "origin/$BASE_REF:pyproject.toml" > /tmp/base_pyproject.toml
+          python3 - <<'PY'
+          import os, re, tomllib
+
+          def read(path):
+              with open(path, "rb") as f:
+                  return tomllib.load(f)["project"]["version"]
+
+          def parts(v):
+              nums = [int(x) for x in v.split(".")[:3]]
+              return tuple(nums + [0] * (3 - len(nums)))
+
+          base = read("/tmp/base_pyproject.toml")
+          head = read("pyproject.toml")
+          labels = [x.strip() for x in os.environ.get("LABELS", "").split(",") if x.strip()]
+          bumps = [x for x in labels if x in ("major", "minor", "bugfix")]
+
+          maj, minr, patch = parts(base)
+          cand = {
+              "major": f"{maj + 1}.0.0",
+              "minor": f"{maj}.{minr + 1}.0",
+              "bugfix": f"{maj}.{minr}.{patch + 1}",
+          }
+
+          def emit(**kv):
+              with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+                  for k, v in kv.items():
+                      fh.write(f"{k}={v}\n")
+
+          # Candidates + versions are always emitted so the report step can build
+          # the comment without recomputing.
+          common = dict(base=base, head=head,
+                        cand_major=cand["major"], cand_minor=cand["minor"],
+                        cand_bugfix=cand["bugfix"])
+
+          if parts(head) > parts(base):
+              emit(decision="pass",
+                   summary=f"Version already bumped: head {head} > main {base}.", **common)
+          elif len(bumps) > 1:
+              emit(decision="error",
+                   summary=f"Multiple bump labels ({', '.join(bumps)}) — add exactly one of major/minor/bugfix.",
+                   **common)
+          elif not bumps:
+              emit(decision="need_label",
+                   summary=(f"pyproject version {head} is not above main {base}. "
+                            f"Add one bump label: major -> {cand['major']}, "
+                            f"minor -> {cand['minor']}, bugfix -> {cand['bugfix']}."),
+                   **common)
+          else:
+              new = cand[bumps[0]]
+              text = open("pyproject.toml").read()
+              open("pyproject.toml", "w").write(
+                  re.sub(r'(?m)^version = ".*"$', f'version = "{new}"', text, count=1)
+              )
+              emit(decision="bump", new=new, bumptype=bumps[0],
+                   summary=f"Applied {bumps[0]} bump from main {base}: version -> {new}.", **common)
+          PY
+
+      - name: Apply, comment, and report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+          DECISION: ${{ steps.decide.outputs.decision }}
+          BASE: ${{ steps.decide.outputs.base }}
+          HEAD: ${{ steps.decide.outputs.head }}
+          NEW: ${{ steps.decide.outputs.new }}
+          BUMPTYPE: ${{ steps.decide.outputs.bumptype }}
+          SUMMARY: ${{ steps.decide.outputs.summary }}
+          C_MAJOR: ${{ steps.decide.outputs.cand_major }}
+          C_MINOR: ${{ steps.decide.outputs.cand_minor }}
+          C_BUGFIX: ${{ steps.decide.outputs.cand_bugfix }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- version-gate -->"
+
+          find_sticky() {
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+              --jq "map(select(.body | contains(\"$MARKER\"))) | .[0].id // empty"
+          }
+
+          # upsert: create or update the single sticky comment
+          upsert_comment() {
+            local id; id="$(find_sticky)"
+            if [ -n "$id" ]; then
+              gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$1" >/dev/null
+            else
+              gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$1" >/dev/null
+            fi
+          }
+
+          # update the sticky only if it already exists (keeps clean PRs comment-free)
+          update_if_exists() {
+            local id; id="$(find_sticky)"
+            [ -n "$id" ] && gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$1" >/dev/null || true
+          }
+
+          echo "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+
+          case "$DECISION" in
+            need_label)
+              body="$MARKER
+          ### 🚦 version-gate — pick a version bump
+
+          \`pyproject\` version **$HEAD** is not above \`main\` **$BASE**, so this PR
+          can't be merged yet (\`main\` auto-releases from this version).
+
+          Add **one** label to choose the bump — CI will write it to \`pyproject.toml\` on \`$HEAD_REF\` and push:
+
+          | label | new version |
+          |---|---|
+          | \`major\` | $C_MAJOR |
+          | \`minor\` | $C_MINOR |
+          | \`bugfix\` | $C_BUGFIX |"
+              upsert_comment "$body"
+              echo "::error::$SUMMARY"
+              exit 1 ;;
+            error)
+              body="$MARKER
+          ### 🚦 version-gate — too many labels
+
+          Keep **exactly one** of \`major\` / \`minor\` / \`bugfix\`."
+              upsert_comment "$body"
+              echo "::error::$SUMMARY"
+              exit 1 ;;
+            bump)
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git commit -am "ci: $BUMPTYPE version bump to $NEW (version-gate)"
+              git push origin "HEAD:$HEAD_REF"
+              body="$MARKER
+          ### ✅ version-gate — $BUMPTYPE bump applied
+
+          \`pyproject\` version → **$NEW** (from \`main\` $BASE), pushed to \`$HEAD_REF\`.
+          Merging this PR will release **v$NEW**."
+              upsert_comment "$body"
+              echo "::notice::$SUMMARY" ;;
+            pass)
+              update_if_exists "$MARKER
+          ### ✅ version-gate — good to merge
+
+          \`pyproject\` version **$HEAD** is above \`main\` **$BASE**."
+              echo "✅ $SUMMARY" ;;
+            *)
+              echo "::error::unexpected decision '${DECISION:-<empty>}'"
+              exit 1 ;;
+          esac

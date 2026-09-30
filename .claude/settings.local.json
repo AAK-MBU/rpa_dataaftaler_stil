@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run *)",
+      "Read(//home/ubuntu/projects/**)",
+      "Bash(rm -f /tmp/claude-1000/-home-ubuntu-projects-rpa-dataaftaler-stil/9d9acf29-4e7b-42aa-b064-416edaae2530/scratchpad/rpa_dataaftaler_stil.zip)",
+      "Bash(zip -rq /tmp/claude-1000/-home-ubuntu-projects-rpa-dataaftaler-stil/9d9acf29-4e7b-42aa-b064-416edaae2530/scratchpad/rpa_dataaftaler_stil.zip rpa_dataaftaler_stil -x '*/.venv/*' '*/__pycache__/*' '*/.git/*' '*/.ruff_cache/*' '*/Output/*' '*.pyc')",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}
