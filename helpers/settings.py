@@ -1,7 +1,7 @@
 """Programmets lokale opsætning: læsning og skrivning af ``.env`` samt genvej.
 
 Opsætningen gemmes i ``config.ENV_PATH`` med nøglerne ``RUN_MODE``,
-``BASE_DIR`` og – ved ``RUN_MODE=ATS`` – ``ATS_URL``, ``ATS_TOKEN`` og
+``LOGIN_ORGANISATION``, ``BASE_DIR`` og – ved ``RUN_MODE=ATS`` – ``ATS_URL``, ``ATS_TOKEN`` og
 ``ATS_WORKQUEUE_OVERRIDE``. Øvrige nøgler i filen bevares uændrede.
 """
 
@@ -30,6 +30,7 @@ SETTING_KEYS = (
     "ATS_URL",
     "ATS_TOKEN",
     "ATS_WORKQUEUE_OVERRIDE",
+    "LOGIN_ORGANISATION",
     "BASE_DIR",
 )
 

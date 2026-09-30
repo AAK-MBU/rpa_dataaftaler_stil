@@ -1,7 +1,7 @@
 """STIL tilslutning API + Selenium helpers.
 
 Robotten er *attended*: Et Chrome-vindue åbnes, og brugeren logger selv ind i
-STIL (Aarhus Kommune Lokal IdP). Efter login høstes sessionens cookies én gang,
+STIL via den lokale IdP fra ``config.get_login_organisation()``. Efter login høstes sessionens cookies én gang,
 og resten af flowet kører som ``requests``-kald på én fast :class:`Session`.
 
 Hvilken institution kaldene gælder, er tilstand på serveren: Den skiftes med
@@ -133,7 +133,7 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
     browser.maximize_window()
     browser.get(config.STIL_LOGIN_URL)
 
-    # Load the STIL login page and pre-select the Aarhus Kommune Lokal IdP.
+    # Load the STIL login page and pre-select the configured Lokal IdP.
     try:
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
             EC.element_to_be_clickable(
@@ -150,7 +150,7 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
         switch_to_new_tab(browser)
         WebDriverWait(browser, config.LOGIN_PAGE_TIMEOUT).until(
             EC.presence_of_element_located((By.ID, "ddlLocalIdPOrganization-input"))
-        ).send_keys(config.LOGIN_ORGANISATION)
+        ).send_keys(config.get_login_organisation())
 
         browser.find_element(By.ID, "ddlLocalIdPOrganization-input").click()
         browser.find_element(By.ID, "btnSubmit").click()

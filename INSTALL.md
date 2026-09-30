@@ -22,8 +22,10 @@ skal ikke installeres manuelt.
    1. Vælg **ATS** (ændringer køres via arbejdskø i Automation Server) eller
       **Lokalt** (ændringer køres direkte uden arbejdskø).
    2. Ved ATS: indtast URL, token og workqueue-ID.
-   3. Vælg mappen til output. Overblik og logs gemmes i undermappen `Output`.
-   4. Vælg om der skal oprettes en genvej, og hvor (standard: skrivebordet).
+   3. Skriv IdP-organisationen, der vælges ved login i STIL, præcis som den står
+      i listen på loginsiden (fx `Aarhus Kommune, 55133018, Aarhus Kommune`).
+   4. Vælg mappen til output. Overblik og logs gemmes i undermappen `Output`.
+   5. Vælg om der skal oprettes en genvej, og hvor (standard: skrivebordet).
       Genvejen får programmets ikon (`app.ico`).
 4. Tryk **Gem**. Hovedvinduet åbner.
 

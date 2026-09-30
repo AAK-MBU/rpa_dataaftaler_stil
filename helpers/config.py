@@ -47,8 +47,16 @@ STIL_OPDATER_STATUS_METHOD = "POST"  # TODO(HAR): bekræft metode
 # Cookies der udgør den faste session efter login.
 STIL_SESSION_COOKIES = ("SESSION", "stil_generic_persist", "XSRF-TOKEN")
 
-# Aarhus Kommune Lokal IdP organisation string used on the login page
-LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"
+# Lokal IdP-organisation der vælges på STIL's loginside. Teksten skal svare
+# præcis til en linje i listen på loginsiden ("<navn>, <CVR>, <navn>").
+# Sættes i opsætningsdialogen som env LOGIN_ORGANISATION.
+DEFAULT_LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"
+
+
+def get_login_organisation() -> str:
+    """Returnér IdP-organisationen fra env ``LOGIN_ORGANISATION`` eller standardværdien."""
+    return (os.getenv("LOGIN_ORGANISATION") or "").strip() or DEFAULT_LOGIN_ORGANISATION
+
 
 # Login flow waits (seconds)
 LOGIN_PAGE_TIMEOUT = 60

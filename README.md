@@ -8,7 +8,7 @@ Server. Ændringerne køres enten via en arbejdskø i Automation Server (driftsf
 **ATS**) eller direkte fra computeren uden kø (driftsform **Lokalt**).
 
 Robotten er *attended*: den åbner en browser, hvor medarbejderen selv logger ind
-i STIL (Aarhus Kommune Lokal IdP), hvorefter resten kører automatisk.
+i STIL via den lokale IdP, der er valgt under opsætningen, hvorefter resten kører automatisk.
 
 ## Funktioner
 
@@ -44,9 +44,11 @@ opsætningsdialog før hovedvinduet. Den går igennem:
 
 1. **Driftsform** – ATS eller Lokalt.
 2. **Automation Server** – URL, token og workqueue-ID (kun ved ATS).
-3. **Mappe til output** – gemmes som `BASE_DIR`; overblik og logs lægges i
+3. **Login** – IdP-organisationen der vælges på STIL's loginside, skrevet præcis
+   som i listen dér (fx `Aarhus Kommune, 55133018, Aarhus Kommune`).
+4. **Mappe til output** – gemmes som `BASE_DIR`; overblik og logs lægges i
    `<mappe>/Output`.
-4. **Genvej (valgfrit, kun Windows)** – opretter `Dataaftaler - STIL.lnk` til
+5. **Genvej (valgfrit, kun Windows)** – opretter `Dataaftaler - STIL.lnk` til
    `start-dataaftaler.bat` i den valgte mappe (standard: skrivebordet) med
    `app.ico` som ikon.
 
@@ -61,6 +63,7 @@ Relevante `.env`-værdier:
 | `ATS_TOKEN` / `ATS_URL` | Adgang til Automation Server-API'et (arbejdskøen). Kun ved `ATS`. |
 | `ATS_WORKQUEUE_OVERRIDE` | ID på den arbejdskø der skal bruges. Kun ved `ATS`. |
 | `LOCAL_DEVELOPMENT` | `true` ved desktop-/lokal kørsel. |
+| `LOGIN_ORGANISATION` | Lokal IdP-organisation på STIL's loginside (standard: `Aarhus Kommune, 55133018, Aarhus Kommune`). |
 | `BASE_DIR` | Mappe til input/output (default: repo-roden). Filer lægges i `BASE_DIR/Output`. |
 | `SEND_ERROR_EMAILS` | `false` på desktop (fejl vises i historikken/loggen). |
 

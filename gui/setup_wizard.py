@@ -4,8 +4,10 @@ Dialogen går trinvis gennem:
 
 1. **Driftsform** – ATS (arbejdskø i Automation Server) eller lokalt (ingen kø).
 2. **Automation Server** – URL, token og workqueue-ID (kun ved ATS).
-3. **Output-mappe** – ``BASE_DIR``; overblik og logs lægges i ``<mappe>/Output``.
-4. **Genvej** – valgfri genvej til ``start-dataaftaler.bat`` med ``app.ico`` som ikon.
+3. **Login** – IdP-organisationen der vælges på STIL's loginside
+   (``LOGIN_ORGANISATION``).
+4. **Output-mappe** – ``BASE_DIR``; overblik og logs lægges i ``<mappe>/Output``.
+5. **Genvej** – valgfri genvej til ``start-dataaftaler.bat`` med ``app.ico`` som ikon.
 
 Værdierne gemmes med :func:`helpers.settings.save_settings`, når brugeren
 trykker "Gem".
@@ -41,6 +43,7 @@ class SetupWizard(tk.Toplevel):
         self.url_var = tk.StringVar(value=current["ATS_URL"])
         self.token_var = tk.StringVar(value=current["ATS_TOKEN"])
         self.workqueue_var = tk.StringVar(value=current["ATS_WORKQUEUE_OVERRIDE"])
+        self.idp_var = tk.StringVar(value=config.get_login_organisation())
         self.base_dir_var = tk.StringVar(
             value=current["BASE_DIR"] or str(config.get_base_dir())
         )
@@ -67,7 +70,7 @@ class SetupWizard(tk.Toplevel):
         steps = [self._step_mode]
         if self.mode_var.get() == config.RUN_MODE_ATS:
             steps.append(self._step_ats)
-        steps += [self._step_output, self._step_shortcut]
+        steps += [self._step_login, self._step_output, self._step_shortcut]
         return steps
 
     def _build_buttons(self) -> None:
@@ -156,6 +159,18 @@ class SetupWizard(tk.Toplevel):
         self._labelled_entry("Token", self.token_var, show="•")
         self._labelled_entry("Workqueue-ID", self.workqueue_var)
 
+    def _step_login(self) -> None:
+        self._heading(
+            "Login i STIL",
+            "Skriv navnet på den organisation (lokal IdP), der skal vælges på "
+            "STIL's loginside. Teksten skal stå præcis som i listen på "
+            "loginsiden, fx:",
+        )
+        ttk.Label(
+            self.body, text=config.DEFAULT_LOGIN_ORGANISATION, foreground="gray"
+        ).pack(anchor=tk.W, **_PAD)
+        self._labelled_entry("IdP-organisation", self.idp_var)
+
     def _folder_picker(self, var: tk.StringVar, title: str) -> None:
         row = ttk.Frame(self.body)
         row.pack(fill=tk.X, **_PAD)
@@ -208,7 +223,16 @@ class SetupWizard(tk.Toplevel):
 
     # ------------------------------------------------------------ validation
     def _validate_step(self) -> bool:
-        step = self._steps()[self.step_index]
+        """Vis en advarsel og returnér False, hvis det aktuelle trin er ugyldigt."""
+        error = self._step_error(self._steps()[self.step_index])
+        if error:
+            self._warn(error)
+            return False
+        return True
+
+    def _step_error(self, step) -> str | None:
+        """Returnér fejlbeskeden for ``step``, eller None hvis trinnet er gyldigt."""
+        error = None
         if step == self._step_ats:
             missing = [
                 name
@@ -220,29 +244,30 @@ class SetupWizard(tk.Toplevel):
                 if not var.get().strip()
             ]
             if missing:
-                self._warn(f"Udfyld venligst: {', '.join(missing)}.")
-                return False
-            if (
+                error = f"Udfyld venligst: {', '.join(missing)}."
+            elif (
                 not self.url_var.get()
                 .strip()
                 .lower()
                 .startswith(("http://", "https://"))
             ):
-                self._warn("URL skal starte med http:// eller https://.")
-                return False
+                error = "URL skal starte med http:// eller https://."
+        elif step == self._step_login:
+            if not self.idp_var.get().strip():
+                error = "Udfyld IdP-organisationen."
         elif step == self._step_output:
             base = self.base_dir_var.get().strip()
             if not base:
-                self._warn("Vælg en mappe til output.")
-                return False
-            if not Path(base).is_dir():
-                self._warn(f"Mappen findes ikke: {base}")
-                return False
-        elif step == self._step_shortcut and self.shortcut_var.get():
-            if not Path(self.shortcut_dir_var.get().strip()).is_dir():
-                self._warn("Vælg en eksisterende mappe til genvejen.")
-                return False
-        return True
+                error = "Vælg en mappe til output."
+            elif not Path(base).is_dir():
+                error = f"Mappen findes ikke: {base}"
+        elif (
+            step == self._step_shortcut
+            and self.shortcut_var.get()
+            and not Path(self.shortcut_dir_var.get().strip()).is_dir()
+        ):
+            error = "Vælg en eksisterende mappe til genvejen."
+        return error
 
     def _warn(self, message: str) -> None:
         messagebox.showwarning("Opsætning", message, parent=self)
@@ -251,6 +276,7 @@ class SetupWizard(tk.Toplevel):
     def _finish(self) -> None:
         values = {
             "RUN_MODE": self.mode_var.get(),
+            "LOGIN_ORGANISATION": self.idp_var.get().strip(),
             "BASE_DIR": self.base_dir_var.get().strip(),
         }
         if self.mode_var.get() == config.RUN_MODE_ATS:
