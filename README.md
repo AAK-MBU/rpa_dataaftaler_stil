@@ -94,12 +94,18 @@ uv run python main.py --local        # læs Excel og gennemfør ændringerne ude
 
 ## Udgivelse
 
-En ny version udgives som en zip-fil på GitHub Releases:
+En ny version udgives automatisk som en zip-fil på GitHub Releases, når en PR
+merges til `main`:
 
-1. Hæv `version` i `pyproject.toml` (fx `2.1.0`) og merge til `main`.
-2. Opret og push et tag med samme version: `git tag v2.1.0 && git push origin v2.1.0`.
-3. `.github/workflows/release.yml` bygger `Dataaftaler-v2.1.0.zip` og lægger den på
-   en release. Workflowet fejler, hvis tagget ikke matcher versionen.
+1. Åbn en PR mod `main`. Er `version` i `pyproject.toml` ikke højere end på
+   `main`, fejler checket **version-gate** (`.github/workflows/version-gate.yml`)
+   og skriver en kommentar i PR'en.
+2. Sæt **én** label på PR'en: `major`, `minor` eller `bugfix`. CI hæver versionen
+   i `pyproject.toml` ud fra `main`'s version og pusher committet til PR'ens
+   branch.
+3. Ved merge til `main` opretter `.github/workflows/release.yml` tagget
+   `v<version>`, bygger `Dataaftaler-v<version>.zip` og lægger den på en release.
+   Findes tagget allerede, sker der intet.
 
 Zip-filen indeholder `Start Dataaftaler.bat` og `LÆS MIG.txt` (fra `packaging/`)
 i yderste mappe og koden i `app/` (et `git archive` af repoet; stier markeret

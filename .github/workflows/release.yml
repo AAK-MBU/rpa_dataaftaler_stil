@@ -1,7 +1,13 @@
-name: Release
+name: Release on main
 
-# Pushing a tag like v2.1.0 builds Dataaftaler-v2.1.0.zip and attaches it to a
-# GitHub release. The tag must match the version in pyproject.toml.
+# When a merge lands on main, tag it v<version> from pyproject.toml
+# ([project].version), build Dataaftaler-v<version>.zip and publish both as a
+# GitHub Release. The job is idempotent: if the tag already exists it is
+# skipped, so merges that don't bump the version (or re-runs) do nothing. The
+# version bump itself is enforced on the PR by version-gate.yml.
+#
+# Tag, zip and release are made in this one job on purpose: a tag pushed with
+# GITHUB_TOKEN does not trigger other workflows.
 #
 # Zip layout:
 #   Dataaftaler/
@@ -11,29 +17,50 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
+
+# Only the latest push to main matters; cancel any superseded run.
+concurrency:
+  group: release-main
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: write # create tags and releases
 
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full history + tags to detect an existing tag
 
-      - name: Check tag matches pyproject version
+      - name: Read version from pyproject.toml
+        id: version
         run: |
-          VERSION=$(grep '^version =' pyproject.toml | awk -F'"' '{print $2}')
-          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME matcher ikke version $VERSION i pyproject.toml."
-            exit 1
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version $version (tag v$version)"
+
+      - name: Check whether the tag is new
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1 || gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::$TAG already exists — nothing to release."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build zip
+        if: steps.check.outputs.new == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           mkdir -p dist
           git archive --prefix=Dataaftaler/app/ HEAD | tar -x -C dist
@@ -45,17 +72,21 @@ jobs:
           import zipfile
           from pathlib import Path
 
-          tag = os.environ["GITHUB_REF_NAME"]
+          tag = os.environ["TAG"]
           root = Path("dist")
           with zipfile.ZipFile(f"Dataaftaler-{tag}.zip", "w", zipfile.ZIP_DEFLATED) as zf:
               for path in sorted(root.rglob("*")):
                   zf.write(path, path.relative_to(root).as_posix())
           EOF
 
-      - name: Create release
+      - name: Create tag and release
+        if: steps.check.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "Dataaftaler-$GITHUB_REF_NAME.zip" \
-            --title "Dataaftaler $GITHUB_REF_NAME" \
+          echo "::notice::Creating release $TAG at $GITHUB_SHA"
+          gh release create "$TAG" "Dataaftaler-$TAG.zip" \
+            --target "$GITHUB_SHA" \
+            --title "Dataaftaler $TAG" \
             --generate-notes
