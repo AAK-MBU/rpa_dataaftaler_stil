@@ -96,17 +96,29 @@ EXCEL_CHANGE_OPTIONS = tuple(EXCEL_CHANGE_TO_REFERENCE)
 # ----------------------
 # Filesystem layout
 # ----------------------
+# CODE_DIR er mappen med koden (repoets rod, eller app\ i en release-zip).
+CODE_DIR = Path(__file__).resolve().parent.parent
+
+# En release-zip har strukturen Dataaftaler\<OUTER_LAUNCHER_NAME> + Dataaftaler\app\
+# (se .github/workflows/release.yml). INSTALL_DIR er den yderste mappe, når
+# programmet kører fra en sådan pakke, ellers None (fx i et git-checkout).
+OUTER_LAUNCHER_NAME = "Start Dataaftaler.bat"
+INSTALL_DIR: Path | None = (
+    CODE_DIR.parent if (CODE_DIR.parent / OUTER_LAUNCHER_NAME).is_file() else None
+)
+
 # Base directory for input/output files. Overridable via the BASE_DIR env var so the
-# desktop user can point it at a shared/synced folder. Defaults to the repo root.
-_DEFAULT_BASE_DIR = Path(__file__).resolve().parent.parent
+# desktop user can point it at a shared/synced folder. Defaults to the outer
+# install folder of a release, otherwise the code folder.
+_DEFAULT_BASE_DIR = INSTALL_DIR or CODE_DIR
 
 # Programmets egne indstillinger (ATS, driftsform, BASE_DIR) ligger i .env i
-# projektmappen. Opsætningsdialogen i gui/setup_wizard.py skriver til den.
-ENV_PATH = _DEFAULT_BASE_DIR / ".env"
+# kodemappen. Opsætningsdialogen i gui/setup_wizard.py skriver til den.
+ENV_PATH = CODE_DIR / ".env"
 
 
 def get_base_dir() -> Path:
-    """Return the configured base directory for files (env BASE_DIR or repo root)."""
+    """Return the configured base directory for files (env BASE_DIR or the default)."""
     return Path(os.getenv("BASE_DIR", str(_DEFAULT_BASE_DIR)))
 
 

@@ -71,7 +71,7 @@ Relevante `.env`-værdier:
 
 ## Kørsel
 
-**Slutbruger (uden Python-kendskab):** dobbeltklik `start-dataaftaler.bat`. Første
+**Slutbruger (uden Python-kendskab):** hent zip-filen fra seneste release og dobbeltklik `Start Dataaftaler.bat`. Første
 kørsel installerer `uv` og afhængigheder automatisk; derefter åbner vinduet uden
 konsol. Se [`INSTALL.md`](INSTALL.md) for opsætning og hvordan man laver en genvej
 på skrivebordet.
@@ -91,6 +91,21 @@ uv run python main.py --process      # gennemfør ændringerne i STIL
 uv run python main.py --finalize     # opsummér resultatet
 uv run python main.py --local        # læs Excel og gennemfør ændringerne uden kø
 ```
+
+## Udgivelse
+
+En ny version udgives som en zip-fil på GitHub Releases:
+
+1. Hæv `version` i `pyproject.toml` (fx `2.1.0`) og merge til `main`.
+2. Opret og push et tag med samme version: `git tag v2.1.0 && git push origin v2.1.0`.
+3. `.github/workflows/release.yml` bygger `Dataaftaler-v2.1.0.zip` og lægger den på
+   en release. Workflowet fejler, hvis tagget ikke matcher versionen.
+
+Zip-filen indeholder `Start Dataaftaler.bat` og `LÆS MIG.txt` (fra `packaging/`)
+i yderste mappe og koden i `app/` (et `git archive` af repoet; stier markeret
+`export-ignore` i `.gitattributes` er udeladt). Når programmet kører fra en sådan
+pakke, er standardmappen til output den yderste mappe (`config.INSTALL_DIR`);
+`.env` og `.venv` ligger i `app/`.
 
 ## Arkitektur
 

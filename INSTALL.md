@@ -8,6 +8,7 @@ med et dobbeltklik.
 
 - Windows.
 - Google Chrome installeret.
+- Git installeret (bruges til at hente en af programmets afhængigheder).
 - Internetadgang (første kørsel henter værktøjer og `chromedriver`).
 
 `uv` (Python-værktøjet) installeres automatisk af launcheren første gang – det
@@ -15,21 +16,33 @@ skal ikke installeres manuelt.
 
 ## Opsætning (en gang pr. maskine)
 
-1. Pak projektmappen ud et fast sted, fx `C:\Programmer\Dataaftaler\`.
-2. Dobbeltklik **`start-dataaftaler.bat`**. Første gang installeres `uv` og alle
+1. Hent `Dataaftaler-v<version>.zip` fra den
+   [seneste release](https://github.com/AAK-MBU/rpa_dataaftaler_stil/releases/latest).
+2. Pak zip-filen ud et sted, hvor brugeren selv kan skrive, fx
+   `C:\Users\<bruger>\Dataaftaler\` (ikke under `C:\Program Files`). Mappen ser
+   sådan ud:
+
+   ```
+   Dataaftaler\
+   ├─ Start Dataaftaler.bat   ← start programmet her
+   ├─ LÆS MIG.txt
+   └─ app\                   ← selve programmet, .venv og .env
+   ```
+3. Dobbeltklik **`Start Dataaftaler.bat`**. Første gang installeres `uv` og alle
    afhængigheder (det tager lidt tid og viser status i et konsolvindue).
-3. Programmet åbner en opsætningsdialog:
+4. Programmet åbner en opsætningsdialog:
    1. Vælg **ATS** (ændringer køres via arbejdskø i Automation Server) eller
       **Lokalt** (ændringer køres direkte uden arbejdskø).
    2. Ved ATS: indtast URL, token og workqueue-ID.
    3. Skriv IdP-organisationen, der vælges ved login i STIL, præcis som den står
       i listen på loginsiden (fx `Aarhus Kommune, 55133018, Aarhus Kommune`).
-   4. Vælg mappen til output. Overblik og logs gemmes i undermappen `Output`.
+   4. Vælg mappen til output (standard: den yderste `Dataaftaler`-mappe).
+      Overblik og logs gemmes i undermappen `Output`.
    5. Vælg om der skal oprettes en genvej, og hvor (standard: skrivebordet).
       Genvejen får programmets ikon (`app.ico`).
-4. Tryk **Gem**. Hovedvinduet åbner.
+5. Tryk **Gem**. Hovedvinduet åbner.
 
-Opsætningen gemmes i `.env` i projektmappen og kan ændres senere med knappen
+Opsætningen gemmes i `app\.env` og kan ændres senere med knappen
 **Opsætning** i programmet.
 
 Når opsætningen er gemt, og afhængighederne er installeret, åbner senere starter
@@ -39,7 +52,7 @@ afhængighederne opdateres.
 
 ## Daglig brug
 
-Dobbeltklik **`start-dataaftaler.bat`**.
+Dobbeltklik **`Start Dataaftaler.bat`** (eller genvejen).
 
 ### Arbejdsgang i programmet
 
@@ -64,9 +77,9 @@ Dobbeltklik **`start-dataaftaler.bat`**.
 
 Opsætningsdialogen kan oprette genvejen automatisk. Vil du lave den manuelt:
 
-1. Højreklik `start-dataaftaler.bat` → **Send til** → **Skrivebord (opret genvej)**.
+1. Højreklik `Start Dataaftaler.bat` → **Send til** → **Skrivebord (opret genvej)**.
 2. (Valgfrit) Højreklik genvejen → **Egenskaber** → **Skift ikon** og vælg
-   `app.ico` i projektmappen.
+   `app.ico` i mappen `app`.
 
 ## Alternativ: kør fra kommandolinjen
 

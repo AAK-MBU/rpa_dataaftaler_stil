@@ -19,7 +19,7 @@ from helpers import config
 
 logger = logging.getLogger(__name__)
 
-PROJECT_DIR = config.ENV_PATH.parent
+PROJECT_DIR = config.CODE_DIR
 LAUNCHER_PATH = PROJECT_DIR / "start-dataaftaler.bat"
 ICON_PATH = PROJECT_DIR / "app.ico"
 SHORTCUT_NAME = "Dataaftaler - STIL.lnk"
