@@ -29,14 +29,50 @@ REM --- Step 2: install/update dependencies ---
 echo Step 2/3 - Klargører programmet (kan tage lidt tid første gang)...
 uv sync || (echo. & echo Fejl under installation. Kontakt support. & pause & exit /b 1)
 
-REM --- Step 3: launch windowless via the synced venv, then close this console ---
+REM --- Step 3: launch windowless via the synced venv ---
+REM The app creates READY_FILE once its first window is shown (see
+REM gui/app.py); this console waits for it so the user is not left without
+REM feedback while Python starts.
+set "READY_FILE=%TEMP%\dataaftaler_ready_%RANDOM%%RANDOM%.flag"
+del "%READY_FILE%" >nul 2>nul
+set "DATAAFTALER_READY_FILE=%READY_FILE%"
+
 echo Step 3/3 - Starter programmet...
 start "" ".venv\Scripts\pythonw.exe" -m gui.app
 
+echo.
 if defined FIRST_SETUP (
-    echo.
-    echo Gør klar til opsætning, vent på pop up vindue når dette vindue lukkes
-    REM Keep the message readable for a moment before the console closes.
-    timeout /t 5 /nobreak >nul
+    echo Gør klar til opsætning. Vent på opsætningsvinduet – dette vindue lukker, når det er åbent.
+) else (
+    echo Venter på programvinduet – dette vindue lukker, når det er åbent.
 )
+
+set /a WAITED=0
+set /a MAX_WAIT=180
+
+:wait_loop
+if exist "%READY_FILE%" goto :ready
+if %WAITED% geq %MAX_WAIT% goto :not_ready
+timeout /t 1 /nobreak >nul
+set /a WAITED+=1
+set /a TICK=WAITED %% 5
+if %TICK%==0 call :waiting_message
+goto :wait_loop
+
+:waiting_message
+set /a MSG=(WAITED / 5) %% 3
+if %MSG%==1 echo Vent stadig, den er på vej... (%WAITED% sek.)
+if %MSG%==2 echo Programmet indlæses stadig... (%WAITED% sek.)
+if %MSG%==0 echo Næsten klar, bliv ved med at vente... (%WAITED% sek.)
+exit /b
+
+:ready
+del "%READY_FILE%" >nul 2>nul
+exit
+
+:not_ready
+echo.
+echo Programvinduet er ikke dukket op efter %MAX_WAIT% sekunder.
+echo Hvis det ikke åbner, så luk dette vindue og prøv igen, eller kontakt support.
+pause
 exit

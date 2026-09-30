@@ -45,6 +45,9 @@ from processes.overview import run_overview
 
 logger = logging.getLogger(__name__)
 
+# Delay after the event loop starts before the launcher is told the window is up.
+_READY_SIGNAL_DELAY_MS = 300
+
 
 def _open_in_default_app(path: str) -> None:
     """Open a file with the OS default application (Windows/macOS/Linux)."""
@@ -429,12 +432,29 @@ class DataaftalerApp:
         self.root.destroy()
 
 
+def _signal_ready() -> None:
+    """Opret filen i env ``DATAAFTALER_READY_FILE``, så launcheren kan lukke.
+
+    ``start-dataaftaler.bat`` venter på filen og viser ventebeskeder, indtil
+    programmets første vindue (opsætning eller hovedvindue) er vist.
+    """
+    path = os.environ.pop("DATAAFTALER_READY_FILE", None)
+    if not path:
+        return
+    try:
+        Path(path).write_text("ready", encoding="utf-8")
+    except OSError:
+        logger.debug("Kunne ikke skrive klar-signal til launcheren", exc_info=True)
+
+
 def main() -> None:
     """Launch the desktop application."""
     # Load .env before anything reads config (BASE_DIR drives the Output/log dirs).
     load_dotenv(config.ENV_PATH)
     root = tk.Tk()
     _set_window_icon(root)
+    # Runs from the event loop once the first window (wizard or main) is drawn.
+    root.after(_READY_SIGNAL_DELAY_MS, _signal_ready)
 
     if not settings.is_configured():
         # First start: the setup has to be saved before the main window (and
