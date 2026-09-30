@@ -5,6 +5,13 @@ REM The file is UTF-8 with CRLF line endings; chcp 65001 makes the console print
 chcp 65001 >nul
 cd /d "%~dp0"
 
+REM Relaunch in its own classic console window (conhost), so Windows Terminal
+REM cannot open the launcher as a tab in an already open terminal window.
+if /i not "%~1"=="--own-window" if exist "%SystemRoot%\System32\conhost.exe" (
+    start "" "%SystemRoot%\System32\conhost.exe" cmd.exe /c ""%~f0" --own-window"
+    exit /b
+)
+
 REM The setup wizard opens when .env has no RUN_MODE yet (see gui/app.py).
 set "FIRST_SETUP=1"
 if exist ".env" findstr /b /i /c:"RUN_MODE=" ".env" >nul 2>nul && set "FIRST_SETUP="
