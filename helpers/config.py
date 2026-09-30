@@ -83,6 +83,10 @@ EXCEL_CHANGE_TO_REFERENCE = {
 # desktop user can point it at a shared/synced folder. Defaults to the repo root.
 _DEFAULT_BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Programmets egne indstillinger (ATS, driftsform, BASE_DIR) ligger i .env i
+# projektmappen. Opsætningsdialogen i gui/setup_wizard.py skriver til den.
+ENV_PATH = _DEFAULT_BASE_DIR / ".env"
+
 
 def get_base_dir() -> Path:
     """Return the configured base directory for files (env BASE_DIR or repo root)."""
@@ -101,6 +105,22 @@ def get_log_dir() -> Path:
     log_dir = get_output_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
+
+
+# ----------------------
+# Driftsform
+# ----------------------
+# RUN_MODE=ATS: ændringerne lægges i Automation Server-arbejdskøen og behandles
+# derfra. RUN_MODE=LOKAL: ændringerne fra overbliks-arket køres direkte uden kø.
+RUN_MODE_ATS = "ATS"
+RUN_MODE_LOCAL = "LOKAL"
+RUN_MODES = (RUN_MODE_ATS, RUN_MODE_LOCAL)
+
+
+def get_run_mode() -> str | None:
+    """Returnér driftsformen fra env ``RUN_MODE``, eller None hvis den ikke er gyldig."""
+    mode = (os.getenv("RUN_MODE") or "").strip().upper()
+    return mode if mode in RUN_MODES else None
 
 
 # ----------------------

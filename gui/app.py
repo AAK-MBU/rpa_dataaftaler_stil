@@ -9,6 +9,10 @@ shows live feedback while it runs:
 3. **Pause / Stop** – cooperative controls honoured at every checkpoint.
 4. **End result** – a Danish summary ("X aftaler godkendt, Y slettet, ...").
 
+On first start (no valid ``RUN_MODE`` in ``.env``) the setup wizard in
+:mod:`gui.setup_wizard` is shown before the main window; the "Opsætning" button
+opens it again later.
+
 The process runs on a worker thread; it communicates back via a thread-safe queue
 that the Tk main loop drains. The worker never touches Tk widgets directly.
 """
@@ -32,9 +36,10 @@ from zoneinfo import ZoneInfo
 from automation_server_client import AutomationServer
 from dotenv import load_dotenv
 
-from helpers import config
+from gui.setup_wizard import run_setup_wizard
+from helpers import config, settings
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
-from main import finalize, populate_queue, process_workqueue
+from main import finalize, populate_queue, process_workqueue, run_local
 from processes.overview import run_overview
 
 logger = logging.getLogger(__name__)
@@ -107,6 +112,27 @@ def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     root_logger.addHandler(file_handler)
 
 
+def _set_window_icon(root: tk.Tk) -> None:
+    """Use app.ico for the title-bar icon and the Windows taskbar icon."""
+    ico = Path(__file__).resolve().parent.parent / "app.ico"
+    if not ico.exists():
+        return
+    # Give the process its own identity so Windows uses our icon on the
+    # taskbar (not the generic pythonw icon) when launched windowless.
+    if sys.platform.startswith("win"):
+        with contextlib.suppress(Exception):
+            import ctypes  # noqa: PLC0415
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "aarhus.kommune.dataaftaler.stil"
+            )
+    # `default=` applies the icon to this window and future dialogs too.
+    try:
+        root.iconbitmap(default=str(ico))
+    except tk.TclError:
+        logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
+
+
 class DataaftalerApp:
     """The main Tkinter application window."""
 
@@ -114,7 +140,6 @@ class DataaftalerApp:
         self.root = root
         self.root.title("Dataaftaler – STIL")
         self.root.geometry("820x600")
-        self._set_window_icon()
 
         # Worker <-> GUI plumbing
         self.event_queue: queue.Queue[ReporterEvent] = queue.Queue()
@@ -131,26 +156,6 @@ class DataaftalerApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(config.GUI_POLL_MS, self._drain_events)
-
-    def _set_window_icon(self) -> None:
-        """Use app.ico for the title-bar icon and the Windows taskbar icon."""
-        ico = Path(__file__).resolve().parent.parent / "app.ico"
-        if not ico.exists():
-            return
-        # Give the process its own identity so Windows uses our icon on the
-        # taskbar (not the generic pythonw icon) when launched windowless.
-        if sys.platform.startswith("win"):
-            with contextlib.suppress(Exception):
-                import ctypes  # noqa: PLC0415
-
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                    "aarhus.kommune.dataaftaler.stil"
-                )
-        # `default=` applies the icon to this window and future dialogs too.
-        try:
-            self.root.iconbitmap(default=str(ico))
-        except tk.TclError:
-            logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
 
     # ------------------------------------------------------------------ UI
     def _build_widgets(self) -> None:
@@ -184,6 +189,11 @@ class DataaftalerApp:
             state=tk.DISABLED,
         )
         self.btn_open.pack(side=tk.LEFT, padx=4)
+
+        self.btn_setup = ttk.Button(
+            controls, text="Opsætning", command=self._open_setup
+        )
+        self.btn_setup.pack(side=tk.RIGHT, padx=4)
 
         progress = ttk.Frame(self.root, padding=(10, 0))
         progress.pack(fill=tk.X)
@@ -236,6 +246,18 @@ class DataaftalerApp:
         self._set_running_state(True)
         self.worker.start()
 
+    def _open_setup(self) -> None:
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(
+                "Kører", "Opsætningen kan ikke ændres, mens en proces kører."
+            )
+            return
+        if run_setup_wizard(self.root):
+            self.reporter.log(
+                f"Opsætning gemt. Driftsform: {config.get_run_mode()}. "
+                f"Output: {config.get_output_dir()}"
+            )
+
     def _toggle_pause(self) -> None:
         if self.pause_event.is_set():
             self.pause_event.clear()
@@ -266,11 +288,15 @@ class DataaftalerApp:
 
     def _full_run_worker(self) -> None:
         try:
+            if config.get_run_mode() == config.RUN_MODE_LOCAL:
+                run_local(self.reporter)
+                return
+
             missing = config.missing_ats_env()
             if missing:
                 raise ValueError(
-                    "Automation Server er ikke konfigureret. Følgende mangler i "
-                    f".env: {', '.join(missing)}. Udfyld dem og start igen."
+                    "Automation Server er ikke konfigureret. Følgende mangler: "
+                    f"{', '.join(missing)}. Udfyld dem under Opsætning."
                 )
             try:
                 ats = AutomationServer.from_environment()
@@ -278,7 +304,7 @@ class DataaftalerApp:
             except Exception as e:
                 raise ValueError(
                     "Kunne ikke oprette forbindelse til Automation Server. "
-                    "Tjek ATS_URL, ATS_TOKEN og ATS_WORKQUEUE_OVERRIDE i .env. "
+                    "Tjek URL, token og workqueue-ID under Opsætning. "
                     f"(Teknisk: {e})"
                 ) from e
 
@@ -357,6 +383,7 @@ class DataaftalerApp:
         ctl_state = tk.NORMAL if running else tk.DISABLED
         self.btn_overview.config(state=run_state)
         self.btn_run.config(state=run_state)
+        self.btn_setup.config(state=run_state)
         self.btn_pause.config(state=ctl_state, text="Pause")
         self.btn_stop.config(state=ctl_state)
         # The "open spreadsheet" button is available while idle once an overview
@@ -392,8 +419,19 @@ class DataaftalerApp:
 def main() -> None:
     """Launch the desktop application."""
     # Load .env before anything reads config (BASE_DIR drives the Output/log dirs).
-    load_dotenv()
+    load_dotenv(config.ENV_PATH)
     root = tk.Tk()
+    _set_window_icon(root)
+
+    if not settings.is_configured():
+        # First start: the setup has to be saved before the main window (and
+        # its log file under BASE_DIR) is created.
+        root.withdraw()
+        if not run_setup_wizard(root):
+            root.destroy()
+            return
+        root.deiconify()
+
     DataaftalerApp(root)
     root.mainloop()
 
