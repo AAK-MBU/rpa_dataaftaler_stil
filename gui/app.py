@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 from automation_server_client import AutomationServer
 from dotenv import load_dotenv
+from PIL import Image, ImageTk
 
 from gui.setup_wizard import run_setup_wizard
 from helpers import config, settings
@@ -131,6 +132,18 @@ def _set_window_icon(root: tk.Tk) -> None:
         root.iconbitmap(default=str(ico))
     except tk.TclError:
         logger.debug("Kunne ikke sætte vinduesikon", exc_info=True)
+    # iconbitmap alone makes Windows upscale a small frame for the taskbar.
+    # Passing every size in app.ico lets Windows pick a sharp one for both the
+    # title bar and the taskbar.
+    try:
+        with Image.open(ico) as icon:
+            sizes = sorted(icon.info.get("sizes", {icon.size}), reverse=True)
+            photos = [ImageTk.PhotoImage(icon.ico.getimage(size)) for size in sizes]
+        root.iconphoto(True, *photos)
+        # Tk does not keep a reference; without this the images are garbage collected.
+        root._icon_photos = photos  # type: ignore[attr-defined]
+    except (OSError, tk.TclError):
+        logger.debug("Kunne ikke sætte ikon i flere størrelser", exc_info=True)
 
 
 class DataaftalerApp:
