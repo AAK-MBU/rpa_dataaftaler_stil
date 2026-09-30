@@ -77,7 +77,10 @@ def _check_response(resp: Response, message: str) -> None:
 def get_org_dict(session: Session) -> dict:
     """Hent alle institutioner og dagtilbud, som brugeren har adgang til.
 
-    Datakilde: GET ``config.STIL_ORGANISATIONER_URL``.
+    Datakilde: GET ``config.STIL_ORGANISATIONER_URL``. Svaret er en liste af
+    organisationsobjekter med nøglerne ``kode``, ``navn``, ``cvr``, ``pnr``,
+    ``type``, ``erPassiveret`` og ``passiveretKommentar``. Kun typerne i
+    ``config.STIL_ORG_TYPES`` medtages.
 
     Returns:
         dict: Organisationsobjekter fra STIL nøglet på institutionsnummer
@@ -85,25 +88,25 @@ def get_org_dict(session: Session) -> dict:
     """
     resp = session.get(config.STIL_ORGANISATIONER_URL, timeout=config.REQUEST_TIMEOUT)
     _check_response(resp, "Fejl ved hentning af organisationer")
-    orgs = resp.json()
-    # TODO(HAR): bekræft svarets struktur (grupper og navnet på nøglefeltet).
     return {
         org["kode"]: org
-        for group in ("institutioner", "dagtilbud")
-        for org in orgs.get(group, [])
+        for org in resp.json()
+        if org.get("type") in config.STIL_ORG_TYPES
     }
 
 
 def get_switch_payload(org_num: str, org_dict: dict) -> dict:
     """Byg payload til skift-organisation for institutionsnummeret ``org_num``.
 
+    Returns:
+        dict: ``{"orgNr": <kode>}``.
+
     Raises:
         KeyError: Hvis ``org_num`` ikke findes i ``org_dict``.
     """
     if org_num not in org_dict:
         raise KeyError(f"Organisation {org_num} findes ikke i organisationslisten")
-    # TODO(HAR): bekræft payload – hele organisationsobjektet eller kun nummeret.
-    return org_dict[org_num]
+    return {"orgNr": org_dict[org_num]["kode"]}
 
 
 # ----------------------------------------------------------------------------
@@ -236,34 +239,66 @@ def build_session(browser: webdriver.Chrome) -> Session:
 def switch_organisation(org_num: str, org_dict: dict, session: Session) -> None:
     """Gør ``org_num`` til den aktive institution for ``session``.
 
-    Datakilde: POST ``config.STIL_SKIFT_ORG_URL``.
+    Datakilde: POST ``config.STIL_SKIFT_ORG_URL``. Svaret beskriver brugeren,
+    og ``orgResponse.kode`` er den organisation, der nu er aktiv.
+
+    Raises:
+        RuntimeError: Hvis STIL svarer med en anden aktiv organisation.
     """
     url = _require_url(config.STIL_SKIFT_ORG_URL, "skift-organisation")
     payload = get_switch_payload(org_num, org_dict)
     resp = session.post(url, json=payload, timeout=config.REQUEST_TIMEOUT)
-    # TODO(HAR): hvis svaret angiver den aktive organisation, verificér den her.
     _check_response(resp, f"Fejl ved skift til organisation: {org_num}")
+
+    active = (resp.json().get("orgResponse") or {}).get("kode")
+    if active != org_num:
+        raise RuntimeError(
+            f"Skift til organisation {org_num} mislykkedes; STIL angiver {active} "
+            "som aktiv organisation."
+        )
 
 
 def get_data(session: Session, org_num: str | None = None) -> dict:
     """Hent dataaftalerne for den aktive institution.
 
-    Datakilde: GET ``config.STIL_DATAAFTALER_URL``.
+    Datakilde: GET ``config.STIL_DATAAFTALER_URL``, side for side med
+    ``config.STIL_DATAAFTALER_PAGE_SIZE`` aftaler pr. side, inklusive slettede.
+    Hver side har nøglerne ``antalSider``, ``side``, ``totalAntalHits`` og
+    ``resultater``. Et aftaleobjekt har nøglerne ``aftaleId``, ``aftaleStatus``
+    (``GODKENDT``, ``VENTER`` eller ``SLETTET``), ``udbyderNavn``,
+    ``udbydersystemNavn``, ``udbydersystemId``, ``udbydersystemPassiveret``,
+    ``servicekode`` og ``serviceNavn``.
 
     Returns:
         dict: Aftaleobjekter fra STIL nøglet på
-        ``<systemNavn>_<serviceNavn>_<aktuelStatus>``.
+        ``<udbydersystemNavn>_<serviceNavn>_<aftaleStatus>``.
     """
     url = _require_url(config.STIL_DATAAFTALER_URL, "dataaftaler")
-    resp = session.get(url, timeout=config.REQUEST_TIMEOUT)
-    _check_response(resp, f"Fejl ved hentning af aftaler for organisation: {org_num}")
+    agreements: list[dict] = []
+    page = 1
+    while True:
+        params = {
+            "inkluderSlettede": "true",
+            "soegning": "",
+            "side": page,
+            "antalPrSide": config.STIL_DATAAFTALER_PAGE_SIZE,
+            "sort": "UDBYDERNAVN",
+            "sortDesc": "false",
+        }
+        resp = session.get(url, params=params, timeout=config.REQUEST_TIMEOUT)
+        _check_response(
+            resp, f"Fejl ved hentning af aftaler for organisation: {org_num}"
+        )
+        body = resp.json()
+        agreements.extend(body.get("resultater") or [])
+        if page >= (body.get("antalSider") or 1):
+            break
+        page += 1
 
-    # TODO(HAR): bekræft feltnavne (udbydersystem.navn, stilService.servicenavn,
-    # aktuelStatus, aftaleId) og om svaret er en liste.
     return {
-        f"{agr['udbydersystem']['navn']}_{agr['stilService']['servicenavn']}_{agr['aktuelStatus']}": agr
-        for agr in resp.json()
-        if agr["stilService"] is not None
+        f"{agr['udbydersystemNavn']}_{agr['serviceNavn']}_{agr['aftaleStatus']}": agr
+        for agr in agreements
+        if agr.get("serviceNavn")
     }
 
 
@@ -274,7 +309,7 @@ def update_status(agreement: dict, status: str, session: Session) -> Response:
     ``config.STIL_OPDATER_STATUS_URL``.
     """
     url = _require_url(config.STIL_OPDATER_STATUS_URL, "opdater_status")
-    logger.info("Ændrer status fra %s til %s", agreement.get("aktuelStatus"), status)
+    logger.info("Ændrer status fra %s til %s", agreement.get("aftaleStatus"), status)
 
     # TODO(HAR): bekræft payload, og om sletning også går via dette kald.
     payload = {"aftaleid": agreement["aftaleId"], "status": status, "kommentar": None}

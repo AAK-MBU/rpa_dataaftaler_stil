@@ -34,21 +34,13 @@ _COLS_LEFT = [
     "status",
     "statusændring",
     "systemNavn",
-    "systemBeskrivelse",
     "serviceNavn",
     "udbyderNavn",
-    "Kontaktperson",
 ]
 
-# TODO(HAR): bekræft at de flade feltnavne fra dataaftaler-kaldet er uændrede.
 _COLS_RENAME = {
-    "inst_kode": "Instregnr",
-    "aktuelStatus": "status",
-    "stilService_servicenavn": "serviceNavn",
-    "udbydersystem_navn": "systemNavn",
-    "udbydersystem_beskrivelse": "systemBeskrivelse",
-    "udbyder_navn": "udbyderNavn",
-    "udbydersystem_kontaktNavn": "Kontaktperson",
+    "aftaleStatus": "status",
+    "udbydersystemNavn": "systemNavn",
 }
 
 

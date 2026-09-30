@@ -64,9 +64,9 @@ def process_item(
             f"for institution {org_num}"
         )
 
-    if agreement["aktuelStatus"] != current_status:
+    if agreement["aftaleStatus"] != current_status:
         raise ValueError(
-            f"Aftalens aktuelle status fra STIL ({agreement['aktuelStatus']}) "
+            f"Aftalens aktuelle status fra STIL ({agreement['aftaleStatus']}) "
             f"matcher ikke status fra kø-elementet ({current_status})"
         )
 

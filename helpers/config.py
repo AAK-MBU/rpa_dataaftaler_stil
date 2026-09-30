@@ -27,12 +27,19 @@ REQUEST_TIMEOUT = 10  # seconds
 # Endpoints sat til None er endnu ikke fastlagt; kald mod dem rejser
 # NotImplementedError (se helpers.stil_api._require_url).
 STIL_LOGIN_URL = "https://tilslutning.stil.dk/tilslutning/login"
-# TODO(HAR): bekræft at organisationer-kaldet er uændret.
-STIL_ORGANISATIONER_URL = "https://tilslutning.stil.dk/tilslutningBE/organisationer"
-# TODO(HAR): skift-organisation (POST).
-STIL_SKIFT_ORG_URL: str | None = None
-# TODO(HAR): aktive dataaftaler for den valgte organisation (GET).
-STIL_DATAAFTALER_URL: str | None = None
+STIL_ORGANISATIONER_URL = "https://tilslutning.stil.dk/adm/api/bruger/organisationer"
+STIL_SKIFT_ORG_URL: str | None = (
+    "https://tilslutning.stil.dk/adm/api/bruger/skift-organisation"
+)
+STIL_DATAAFTALER_URL: str | None = (
+    "https://tilslutning.stil.dk/adm/api/dataejer/dataaftale"
+)
+STIL_DATAAFTALER_PAGE_SIZE = 300  # største sidestørrelse STIL tillader
+
+# Organisationstyper fra organisationer-kaldet, der er dataejere og derfor
+# indgår i kørslen. UDBYDER er udeladt.
+STIL_ORG_TYPES = ("INSTITUTION", "DAGTILBUD", "RESTINSTITUTION")
+
 # TODO(HAR): opdater_status (endpoint og metode).
 STIL_OPDATER_STATUS_URL: str | None = None
 STIL_OPDATER_STATUS_METHOD = "POST"  # TODO(HAR): bekræft metode
