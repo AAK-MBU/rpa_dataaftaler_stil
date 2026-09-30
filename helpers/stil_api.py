@@ -158,8 +158,15 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
     # Wait for the user to complete the manual MitID login.
     logger.info("Venter på at brugeren logger ind...")
     try:
+        # Efter login viser STIL en modal med overskriften "Vælg organisation".
         WebDriverWait(browser, config.LOGIN_USER_TIMEOUT).until(
-            EC.element_to_be_clickable((By.ID, "organisation-search"))
+            EC.text_to_be_present_in_element(
+                (
+                    By.CSS_SELECTOR,
+                    "div.modal-content div.modal-header h2#modal-title",
+                ),
+                "Vælg organisation",
+            )
         )
     except TimeoutException as e:
         minutes = config.LOGIN_USER_TIMEOUT // 60

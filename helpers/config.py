@@ -45,8 +45,7 @@ STIL_OPDATER_STATUS_URL: str | None = None
 STIL_OPDATER_STATUS_METHOD = "POST"  # TODO(HAR): bekræft metode
 
 # Cookies der udgør den faste session efter login.
-# TODO(HAR): bekræft cookie-navne (fx om AuthTokenTilslutning stadig indgår).
-STIL_SESSION_COOKIES = ("persistence-cookie", "SESSION", "XSRF-TOKEN")
+STIL_SESSION_COOKIES = ("SESSION", "stil_generic_persist", "XSRF-TOKEN")
 
 # Aarhus Kommune Lokal IdP organisation string used on the login page
 LOGIN_ORGANISATION = "Aarhus Kommune, 55133018, Aarhus Kommune"
