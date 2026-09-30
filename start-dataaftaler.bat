@@ -5,6 +5,19 @@ REM The file is UTF-8 with CRLF line endings; chcp 65001 makes the console print
 chcp 65001 >nul
 cd /d "%~dp0"
 
+REM Fast path: when the setup is done and the dependencies match the current
+REM uv.lock/pyproject.toml, start the app straight away without the setup console.
+set "SYNC_MARK=.venv\.synced"
+if not exist ".venv\Scripts\pythonw.exe" goto :full_start
+if not exist ".env" goto :full_start
+findstr /b /i /c:"RUN_MODE=" ".env" >nul 2>nul || goto :full_start
+fc /b "uv.lock" "%SYNC_MARK%-uv.lock" >nul 2>nul || goto :full_start
+fc /b "pyproject.toml" "%SYNC_MARK%-pyproject.toml" >nul 2>nul || goto :full_start
+start "" ".venv\Scripts\pythonw.exe" -m gui.app
+exit
+
+:full_start
+
 REM Relaunch in its own classic console window (conhost), so Windows Terminal
 REM cannot open the launcher as a tab in an already open terminal window.
 if /i not "%~1"=="--own-window" if exist "%SystemRoot%\System32\conhost.exe" (
@@ -28,6 +41,9 @@ set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 REM --- Step 2: install/update dependencies ---
 echo Step 2/3 - Klargører programmet (kan tage lidt tid første gang)...
 uv sync || (echo. & echo Fejl under installation. Kontakt support. & pause & exit /b 1)
+REM Remember what was synced so the next start can take the fast path.
+copy /y "uv.lock" "%SYNC_MARK%-uv.lock" >nul
+copy /y "pyproject.toml" "%SYNC_MARK%-pyproject.toml" >nul
 
 REM --- Step 3: launch windowless via the synced venv ---
 REM The app creates READY_FILE once its first window is shown (see

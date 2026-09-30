@@ -32,8 +32,10 @@ skal ikke installeres manuelt.
 Opsætningen gemmes i `.env` i projektmappen og kan ændres senere med knappen
 **Opsætning** i programmet.
 
-Senere kørsler er hurtige, og konsolvinduet lukker af sig selv, så snart vinduet
-er åbnet.
+Når opsætningen er gemt, og afhængighederne er installeret, åbner senere starter
+programvinduet direkte uden konsolvinduet med trinnene. Er programmet opdateret
+(ændret `uv.lock` eller `pyproject.toml`), vises konsolvinduet igen, mens
+afhængighederne opdateres.
 
 ## Daglig brug
 
