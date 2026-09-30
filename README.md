@@ -18,7 +18,8 @@ Vinduet har to handlinger og lever op til fire feedback-krav:
    institutioner og skriver `Output/dataaftaler_oversigt_<dato>.xlsx` med en
    `statusændring`-kolonne (dropdown: `GODKEND` / `SLET` / `VENT`). Medarbejderen
    redigerer arket manuelt og vælger, hvad der skal ændres.
-2. **Indlæs ændringer & kør** – læser det reviderede Excel-ark, logger ind i STIL
+2. **Indlæs ændringer & kør** – læser det reviderede Excel-ark (ligger der flere
+   i `Output`, vælges arket i en dialog med det senest ændrede øverst), logger ind i STIL
    igen og gennemfører hver ændring (godkend / sæt til venter / slet), og viser
    til sidst et resultat. Ved ATS lægges ændringerne først i Automation
    Server-køen og behandles derfra; ved Lokalt køres de direkte.
@@ -92,6 +93,7 @@ uv run python main.py --local        # læs Excel og gennemfør ændringerne ude
 |---|---|
 | `gui/app.py` | Tkinter-vindue, arbejdstråd, fremdrift/historik/pause/stop. |
 | `gui/setup_wizard.py` | Opsætningsdialog (driftsform, ATS, output-mappe, genvej). |
+| `gui/overview_picker.py` | Dialog til at vælge overbliks-ark, når der er flere i `Output`. |
 | `main.py` | Faser (`populate_queue` / `process_workqueue` / `finalize`), `run_local` + `--overview`. Headless-indgang. |
 | `helpers/settings.py` | Læs/skriv opsætningen i `.env` og opret genvej. |
 | `helpers/stil_api.py` | STIL login (Selenium) + REST-kald (requests). |

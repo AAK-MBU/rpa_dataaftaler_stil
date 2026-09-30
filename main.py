@@ -17,6 +17,7 @@ changes from the reviewed overview directly, without a work queue.
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 from automation_server_client import AutomationServer, Workqueue
 from mbu_rpa_core.exceptions import BusinessError, ProcessError
@@ -38,16 +39,29 @@ from processes.queue_handler import concurrent_add, retrieve_items_for_queue
 logger = logging.getLogger(__name__)
 
 
+def _reading_message(excel_path: Path | None) -> str:
+    """Build the history line that tells which overview sheet is read."""
+    if excel_path is not None:
+        return f"Læser revideret overblik: {excel_path}"
+    return f"Læser revideret overblik fra mappen: {config.get_output_dir()}"
+
+
 async def populate_queue(
-    workqueue: Workqueue, reporter: ProgressReporter | None = None
+    workqueue: Workqueue,
+    reporter: ProgressReporter | None = None,
+    excel_path: Path | None = None,
 ):
-    """Populate the workqueue with items read from the reviewed overview Excel."""
+    """Populate the workqueue with items read from the reviewed overview Excel.
+
+    ``excel_path`` is the sheet to read; without it the single overview sheet in
+    Output/ is used (see :func:`retrieve_items_for_queue`).
+    """
     reporter = reporter or NullReporter()
     reporter.phase("Indlæs ændringer i kø")
     logger.info("Fylder arbejdskøen...")
 
-    reporter.log(f"Læser revideret overblik fra mappen: {config.get_output_dir()}")
-    items_to_queue = retrieve_items_for_queue()
+    reporter.log(_reading_message(excel_path))
+    items_to_queue = retrieve_items_for_queue(excel_path)
 
     queue_references = {str(r) for r in ats_functions.get_workqueue_items(workqueue)}
 
@@ -151,8 +165,13 @@ async def finalize(workqueue: Workqueue, reporter: ProgressReporter | None = Non
         raise pe from e
 
 
-def run_local(reporter: ProgressReporter | None = None) -> dict:
+def run_local(
+    reporter: ProgressReporter | None = None, excel_path: Path | None = None
+) -> dict:
     """Apply the changes from the reviewed overview directly, without a work queue.
+
+    ``excel_path`` is the sheet to read; without it the single overview sheet in
+    Output/ is used.
 
     Reads the changes with :func:`retrieve_items_for_queue` and runs
     :func:`process_item` for each one on a shared STIL session. A
@@ -166,8 +185,8 @@ def run_local(reporter: ProgressReporter | None = None) -> dict:
     """
     reporter = reporter or NullReporter()
     reporter.phase("Indlæs ændringer")
-    reporter.log(f"Læser revideret overblik fra mappen: {config.get_output_dir()}")
-    items = retrieve_items_for_queue()
+    reporter.log(_reading_message(excel_path))
+    items = retrieve_items_for_queue(excel_path)
 
     summary = {
         "godkendt": 0,

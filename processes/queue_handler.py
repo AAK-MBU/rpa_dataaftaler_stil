@@ -1,5 +1,6 @@
 """Queue population: read the reviewed Excel overview and build queue items.
 
+``find_overview_files`` lists the overview sheets in Output/ (newest first) and
 ``retrieve_items_for_queue`` ports the legacy ``queue_upload.retrieve_changes``
 + reference/hash logic. Each returned item is ``{"reference": ..., "data": ...}``;
 ``main.populate_queue`` then de-dupes against the live queue and ``concurrent_add``
@@ -9,11 +10,10 @@ pushes them to the Automation Server workqueue.
 from __future__ import annotations
 
 import asyncio
-import glob
 import hashlib
 import json
 import logging
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -57,35 +57,55 @@ def _dedupe_references(items: list[dict]) -> list[dict]:
     return items
 
 
-def retrieve_items_for_queue() -> list[dict]:
-    """Read the single ``*Oversigt*.xlsx`` in Output/ and build queue items.
+def find_overview_files() -> list[Path]:
+    """Find overbliks-arkene (``*oversigt*.xlsx``) i Output-mappen.
 
-    Only rows whose ``statusændring`` requests a change to a *different* status
-    are included.
+    Excels låsefiler (``~$...``), der ligger ved siden af et åbent ark, springes
+    over.
 
-    Raises ``ValueError`` with a user-facing Danish message if there is not
-    exactly one overview file, the file cannot be read (e.g. it is still open in
-    Excel), or a required column has been deleted/renamed.
+    Returns:
+        list[Path]: Arkene sorteret efter senest ændret, nyeste først.
     """
     output_dir = config.get_output_dir()
     # Case-insensitive match: the file is written lowercase ("...oversigt...") but
     # we must not rely on the OS filesystem being case-insensitive.
-    excel_files = [
+    files = [
         f
-        for f in glob.glob(os.path.join(output_dir, "*.xlsx"))
-        if "oversigt" in os.path.basename(f).lower()
+        for f in output_dir.glob("*.xlsx")
+        if "oversigt" in f.name.lower() and not f.name.startswith("~$")
     ]
-    if len(excel_files) != 1:
-        names = ", ".join(os.path.basename(f) for f in excel_files)
-        raise ValueError(
-            "Der skal være præcis ét Oversigt-regneark i mappen "
-            f"'{output_dir}'. Det reviderede regneark skal ligge dér (det er også "
-            "hvor 'Dan overblik' gemmer det). Slet evt. gamle filer. "
-            f"Filer fundet: {names or '(ingen)'}"
-        )
+    return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
 
-    excel_path = excel_files[0]
-    filename = os.path.basename(excel_path)
+
+def retrieve_items_for_queue(excel_path: str | Path | None = None) -> list[dict]:
+    """Read a reviewed overview sheet and build queue items.
+
+    Only rows whose ``statusændring`` requests a change to a *different* status
+    are included.
+
+    Args:
+        excel_path: Det ark, der skal læses. Uden sti bruges det eneste
+            overbliks-ark fra :func:`find_overview_files`.
+
+    Raises ``ValueError`` with a user-facing Danish message if no sheet is given
+    and there is not exactly one overview file, the file cannot be read (e.g. it
+    is still open in Excel), or a required column has been deleted/renamed.
+    """
+    if excel_path is None:
+        excel_files = find_overview_files()
+        if len(excel_files) != 1:
+            names = ", ".join(f.name for f in excel_files)
+            raise ValueError(
+                "Der skal være præcis ét Oversigt-regneark i mappen "
+                f"'{config.get_output_dir()}', når arket ikke vælges i "
+                "programmet. Slet evt. gamle filer. "
+                f"Filer fundet: {names or '(ingen)'}"
+            )
+        excel_path = excel_files[0]
+
+    excel_path = Path(excel_path)
+    filename = excel_path.name
+    logger.info("Læser ændringer fra %s", excel_path)
     try:
         df = pd.read_excel(excel_path)
     except Exception as e:

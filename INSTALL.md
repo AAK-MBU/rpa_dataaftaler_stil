@@ -48,9 +48,11 @@ Dobbeltklik **`start-dataaftaler.bat`**.
    kolonner).
 3. **Indlæs ændringer & kør** – programmet læser det reviderede ark fra netop
    `Output`-mappen (stien vises også i historikken) og gennemfører ændringerne.
+   Ligger der flere ark i mappen, vælger du arket i en dialog.
 
-> Der må kun ligge **ét** Oversigt-ark i `Output`-mappen ad gangen. Slet gamle
-> ark, ellers ved programmet ikke hvilket der skal bruges.
+> Ligger der flere Oversigt-ark i `Output`-mappen, spørger programmet, hvilket
+> der skal bruges. Arkene vises med det senest ændrede øverst, markeret
+> **★ Senest ændret**.
 
 ## Genvej
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
 import queue
@@ -37,11 +38,13 @@ from automation_server_client import AutomationServer
 from dotenv import load_dotenv
 from PIL import Image, ImageTk
 
+from gui.overview_picker import pick_overview_file
 from gui.setup_wizard import run_setup_wizard
 from helpers import config, settings
 from helpers.reporting import GuiReporter, ReporterEvent, StopRequested
 from main import finalize, populate_queue, process_workqueue, run_local
 from processes.overview import run_overview
+from processes.queue_handler import find_overview_files
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +247,30 @@ class DataaftalerApp:
         self._start_worker(self._overview_worker)
 
     def _start_full_run(self) -> None:
-        self._start_worker(self._full_run_worker)
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo("Kører allerede", "En proces kører allerede.")
+            return
+        excel_path = self._choose_overview_file()
+        if excel_path is None:
+            return
+        self._start_worker(functools.partial(self._full_run_worker, excel_path))
+
+    def _choose_overview_file(self) -> Path | None:
+        """Find the overview sheet to load; ask the user when there are several.
+
+        Returns None when there is no sheet or the user cancels.
+        """
+        files = find_overview_files()
+        if not files:
+            messagebox.showwarning(
+                "Intet overbliks-ark",
+                "Der ligger ikke noget overbliks-ark i mappen:\n"
+                f"{config.get_output_dir()}\n\nDan overblikket først.",
+            )
+            return None
+        if len(files) == 1:
+            return files[0]
+        return pick_overview_file(self.root, files)
 
     def _start_worker(self, target) -> None:
         if self.worker and self.worker.is_alive():
@@ -302,10 +328,10 @@ class DataaftalerApp:
         finally:
             self.reporter.done("Overblik afsluttet.")
 
-    def _full_run_worker(self) -> None:
+    def _full_run_worker(self, excel_path: Path) -> None:
         try:
             if config.get_run_mode() == config.RUN_MODE_LOCAL:
-                run_local(self.reporter)
+                run_local(self.reporter, excel_path)
                 return
 
             missing = config.missing_ats_env()
@@ -324,7 +350,7 @@ class DataaftalerApp:
                     f"(Teknisk: {e})"
                 ) from e
 
-            asyncio.run(populate_queue(workqueue, self.reporter))
+            asyncio.run(populate_queue(workqueue, self.reporter, excel_path))
             asyncio.run(process_workqueue(workqueue, self.reporter))
             asyncio.run(finalize(workqueue, self.reporter))
         except StopRequested:
