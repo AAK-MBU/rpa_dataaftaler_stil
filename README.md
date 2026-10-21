@@ -119,7 +119,7 @@ pakke, er standardmappen til output den yderste mappe (`config.INSTALL_DIR`);
 
 Programmet opdaterer sig selv fra den seneste release (`helpers/updater.py`):
 ved start slås `releases/latest` op i GitHub's API, og er versionen nyere end
-`version` i `pyproject.toml`, tilbydes en opdatering. Den erstatter indholdet af
+`version` i `pyproject.toml`, vises knappen **Opdater til v<version>** i vinduet. Opdateringen erstatter indholdet af
 `app/` (undtagen `.venv`, `.env` og `Output`) og filerne i yderste mappe og
 genstarter via `Start Dataaftaler.bat`. Kører programmet fra et git-checkout
 (`config.INSTALL_DIR` er `None`), tjekkes der ikke.
