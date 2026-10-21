@@ -53,8 +53,10 @@ afhængighederne opdateres.
 ## Opdatering
 
 Når programmet starter, tjekker det, om der er en nyere version på GitHub. Er
-der det, spørger programmet, om det skal opdatere. Ved **Ja** hentes den nye
-version, programfilerne i `app` udskiftes, og programmet genstarter. Opsætningen
+der det, vises knappen **Opdater til v<version>** øverst til højre i vinduet,
+og historikken nævner den nye version. Trykkes der på knappen, hentes den nye
+version, programfilerne i `app` udskiftes, og programmet genstarter. Knappen kan
+ikke bruges, mens en proces kører. Opsætningen
 (`.env`), `.venv` og `Output` bevares. Har den nye version ændrede afhængigheder,
 vises konsolvinduet med trinnene, mens de installeres.
 

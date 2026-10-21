@@ -169,6 +169,7 @@ class DataaftalerApp:
         self.last_summary: dict | None = None
         self.last_summary_message: str = ""
         self.overview_path: str | None = None
+        self.pending_release: updater.ReleaseInfo | None = None
 
         _setup_logging(self.event_queue)
         self._build_widgets()
@@ -206,22 +207,30 @@ class DataaftalerApp:
             return
         if release is None:
             return
-        if self.worker and self.worker.is_alive():
-            self.reporter.log(
-                f"Version {release.version} er tilgængelig. Genstart programmet "
-                "for at opdatere."
-            )
-            return
-        if not messagebox.askyesno(
-            "Ny version",
+        self.pending_release = release
+        self.reporter.log(
             f"Version {release.version} er tilgængelig "
-            f"(du har {updater.installed_version()}).\n\n"
-            "Vil du opdatere nu? Programmet genstarter bagefter.",
-        ):
-            self.reporter.log(f"Opdatering til version {release.version} udskudt.")
+            f"(du har {updater.installed_version()}). Tryk 'Opdater' for at "
+            "installere den. Programmet genstarter bagefter."
+        )
+        busy = self.worker is not None and self.worker.is_alive()
+        self.btn_update.config(
+            text=f"Opdater til v{release.version}",
+            state=tk.DISABLED if busy else tk.NORMAL,
+        )
+        self.btn_update.pack(side=tk.RIGHT, padx=4)
+
+    def _start_update(self) -> None:
+        release = self.pending_release
+        if release is None or (self.worker and self.worker.is_alive()):
             return
         self.reporter.log(f"Henter version {release.version}...")
-        for button in (self.btn_overview, self.btn_run, self.btn_setup):
+        for button in (
+            self.btn_overview,
+            self.btn_run,
+            self.btn_setup,
+            self.btn_update,
+        ):
             button.config(state=tk.DISABLED)
         self.root.config(cursor="watch")
         self._run_in_background(
@@ -296,6 +305,11 @@ class DataaftalerApp:
             controls, text="Opsætning", command=self._open_setup
         )
         self.btn_setup.pack(side=tk.RIGHT, padx=4)
+
+        # Vises først, når opdateringstjekket har fundet en nyere version.
+        self.btn_update = ttk.Button(
+            controls, text="Opdater", command=self._start_update
+        )
 
         if not config.APPLY_CHANGES_ENABLED:
             ttk.Label(
@@ -540,6 +554,7 @@ class DataaftalerApp:
             state=run_state if config.APPLY_CHANGES_ENABLED else tk.DISABLED
         )
         self.btn_setup.config(state=run_state)
+        self.btn_update.config(state=run_state)
         self.btn_pause.config(state=ctl_state, text="Pause")
         self.btn_stop.config(state=ctl_state)
         # The "open spreadsheet" button is available while idle once an overview
