@@ -232,7 +232,11 @@ def build_session(browser: webdriver.Chrome) -> Session:
             f"Login-cookies mangler efter login: {', '.join(missing)}. Prøv igen."
         )
 
-    x_xsrf_token = cookies["XSRF-TOKEN"].split("=", maxsplit=1)[-1] if cookies["XSRF-TOKEN"] else ""
+    x_xsrf_token = (
+        cookies["XSRF-TOKEN"].split("=", maxsplit=1)[-1]
+        if cookies["XSRF-TOKEN"]
+        else ""
+    )
 
     session = Session()
     session.headers.update(
