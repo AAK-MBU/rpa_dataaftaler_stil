@@ -233,7 +233,7 @@ def _swap_app_dir(app_dir: Path, new_app: Path, backup_dir: Path) -> None:
             if item.name not in keep:
                 _move(item, app_dir / item.name)
     except Exception:
-        logger.exception("Opdatering fejlede – gendanner de gamle filer")
+        logger.exception("Opdatering fejlede - gendanner de gamle filer")
         for item in list(app_dir.iterdir()):
             if item.name not in keep:
                 _remove(item)

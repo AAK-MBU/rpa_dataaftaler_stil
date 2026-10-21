@@ -194,7 +194,7 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
         ) from e
     logger.info("Login gennemført. Fortsætter...")
 
-    # Login done – get the browser out of the way and bring the GUI back up.
+    # Login done - get the browser out of the way and bring the GUI back up.
     with contextlib.suppress(Exception):
         browser.minimize_window()
     if reporter is not None:
@@ -232,12 +232,16 @@ def build_session(browser: webdriver.Chrome) -> Session:
             f"Login-cookies mangler efter login: {', '.join(missing)}. Prøv igen."
         )
 
-    x_xsrf_token = cookies["XSRF-TOKEN"].split("=", maxsplit=1)[-1]
+    x_xsrf_token = (
+        cookies["XSRF-TOKEN"].split("=", maxsplit=1)[-1]
+        if cookies["XSRF-TOKEN"]
+        else ""
+    )
 
     session = Session()
     session.headers.update(
         {
-            "Cookie": ";".join(cookies.values()),
+            "Cookie": ";".join([c for c in cookies.values() if c]),
             "x-xsrf-token": x_xsrf_token,
             "accept": "application/json",
             "content-type": "application/json",

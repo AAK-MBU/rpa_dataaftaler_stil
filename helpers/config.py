@@ -64,7 +64,7 @@ LOGIN_PAGE_TIMEOUT = 60
 LOGIN_USER_TIMEOUT = 300  # how long we wait for the user to complete MitID login
 
 # Overview API throttling: pause after this many calls inside the time window
-THROTTLE_AFTER_CALLS = 200
+THROTTLE_AFTER_CALLS = 1200
 THROTTLE_WINDOW_SECONDS = 60
 THROTTLE_PAUSE_SECONDS = 30
 
@@ -183,4 +183,4 @@ GUI_POLL_MS = 100  # how often the Tkinter loop drains the worker event queue
 
 # "Indlæs ændringer & kør" (statusændring og sletning via PUT/DELETE) er slået
 # fra i GUI'et, indtil de kald er testet mod STIL. Kun "Dan overblik" er testet.
-APPLY_CHANGES_ENABLED = False
+APPLY_CHANGES_ENABLED = True

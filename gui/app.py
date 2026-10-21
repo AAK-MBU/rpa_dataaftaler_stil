@@ -3,11 +3,11 @@
 Runs the process from a caseworker's desktop (not from Automation Server) and
 shows live feedback while it runs:
 
-1. **Progress** – a bar + phase label driven by the reporter.
-2. **History** – a scrolling log of everything that has happened (also written to
+1. **Progress** - a bar + phase label driven by the reporter.
+2. **History** - a scrolling log of everything that has happened (also written to
    a timestamped file under ``Output/logs/``).
-3. **Pause / Stop** – cooperative controls honoured at every checkpoint.
-4. **End result** – a Danish summary ("X aftaler godkendt, Y slettet, ...").
+3. **Pause / Stop** - cooperative controls honoured at every checkpoint.
+4. **End result** - a Danish summary ("X aftaler godkendt, Y slettet, ...").
 
 On first start (no valid ``RUN_MODE`` in ``.env``) the setup wizard in
 :mod:`gui.setup_wizard` is shown before the main window; the "Opsætning" button
@@ -63,7 +63,7 @@ def _open_in_default_app(path: str) -> None:
 
 
 class _NoTracebackFormatter(logging.Formatter):
-    """Formats only the message line – never the exception/stack traceback.
+    """Formats only the message line - never the exception/stack traceback.
 
     The traceback still reaches the run-log file (whose handler formats the same
     record afterwards); the GUI history just shows the human-readable line.
@@ -97,7 +97,7 @@ def _setup_logging(event_queue: queue.Queue[ReporterEvent]) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # GUI history: terse "time [level] message" – no module name, no traceback.
+    # GUI history: terse "time [level] message" - no module name, no traceback.
     gui_handler = _QueueLogHandler(event_queue)
     gui_handler.setFormatter(
         _NoTracebackFormatter(
@@ -157,7 +157,7 @@ class DataaftalerApp:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title(f"Dataaftaler – STIL (v{updater.installed_version()})")
+        self.root.title(f"Dataaftaler - STIL (v{updater.installed_version()})")
         self.root.geometry("820x600")
 
         # Worker <-> GUI plumbing
@@ -302,7 +302,7 @@ class DataaftalerApp:
                 self.root,
                 text=(
                     "Indlæsning og opdatering af aftaler er slået fra i denne "
-                    "version – kun 'Dan overblik' er testet."
+                    "version - kun 'Dan overblik' er testet."
                 ),
                 foreground="gray",
                 padding=(10, 0, 10, 6),
@@ -425,7 +425,7 @@ class DataaftalerApp:
     def _request_stop(self) -> None:
         self.stop_event.set()
         self.pause_event.clear()  # unblock a paused checkpoint so it can stop
-        self.reporter.log("Stop anmodet – afslutter ved næste checkpoint...")
+        self.reporter.log("Stop anmodet - afslutter ved næste checkpoint...")
         self.btn_stop.config(state=tk.DISABLED)
 
     # -------------------------------------------------------------- workers

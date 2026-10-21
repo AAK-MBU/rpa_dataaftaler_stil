@@ -7,7 +7,7 @@ agreements and writes them to ``Output/dataaftaler_oversigt_<dato>.xlsx`` with a
 throttle are surfaced through the reporter, and a stop/pause checkpoint runs
 once per organisation.
 
-This is *not* a workqueue phase – it produces the spreadsheet the user reviews
+This is *not* a workqueue phase - it produces the spreadsheet the user reviews
 before the queue is populated.
 """
 
@@ -73,14 +73,14 @@ def run_overview(reporter: ProgressReporter | None = None) -> str:
                 and time.monotonic() - window_start < config.THROTTLE_WINDOW_SECONDS
             ):
                 reporter.log(
-                    f"{api_counter} API-kald – pauser "
+                    f"{api_counter} API-kald - pauser "
                     f"{config.THROTTLE_PAUSE_SECONDS} sekunder for ikke at "
                     "overbelaste STIL."
                 )
                 time.sleep(config.THROTTLE_PAUSE_SECONDS)
                 reporter.log(
                     f"Pause på {config.THROTTLE_PAUSE_SECONDS} sekunder afsluttet "
-                    "– fortsætter API-kald."
+                    "- fortsætter API-kald."
                 )
                 api_counter = 0
                 window_start = time.monotonic()
@@ -158,8 +158,8 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
             if status_cell.value != "SLETTET":
                 options = ",".join(config.EXCEL_CHANGE_OPTIONS)
                 dv = DataValidation(type="list", formula1=f'"{options}"')
-                dv.error_title = "Ugyldigt input"
-                dv.error_message = "Vælg venligst en værdi fra rullelisten"
+                dv.errorTitle = "Ugyldigt input"
+                dv.error = "Vælg venligst en værdi fra rullelisten"
                 worksheet.add_data_validation(dv)
                 dv.add(statusaendring_cell)
 

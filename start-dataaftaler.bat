@@ -58,9 +58,9 @@ start "" ".venv\Scripts\pythonw.exe" -m gui.app
 
 echo.
 if defined FIRST_SETUP (
-    echo Gør klar til opsætning. Vent på opsætningsvinduet – dette vindue lukker, når det er åbent.
+    echo Gør klar til opsætning. Vent på opsætningsvinduet - dette vindue lukker, når det er åbent.
 ) else (
-    echo Venter på programvinduet – dette vindue lukker, når det er åbent.
+    echo Venter på programvinduet - dette vindue lukker, når det er åbent.
 )
 
 set /a WAITED=0

@@ -1,4 +1,4 @@
-# Dataaftaler – STIL (desktop)
+# Dataaftaler - STIL (desktop)
 
 RPA-løsning til at danne overblik over og opdatere dataaftaler i STIL
 ([tilslutning.stil.dk](https://tilslutning.stil.dk)). Bygget på
@@ -14,12 +14,12 @@ i STIL via den lokale IdP, der er valgt under opsætningen, hvorefter resten kø
 
 Vinduet har to handlinger og lever op til fire feedback-krav:
 
-1. **Dann overblik (Excel)** – logger ind i STIL, henter alle dataaftaler for alle
+1. **Dann overblik (Excel)** - logger ind i STIL, henter alle dataaftaler for alle
    institutioner og skriver `Output/dataaftaler_oversigt_<dato>.xlsx` med en
    `statusændring`-kolonne (dropdown: `GODKEND` / `VENT` / `AFVIS` / `SLET`) og
    en `kommentar`-kolonne lige til højre for den. Medarbejderen redigerer arket
    manuelt og vælger, hvad der skal ændres.
-2. **Indlæs ændringer & kør** – læser det reviderede Excel-ark (ligger der flere
+2. **Indlæs ændringer & kør** - læser det reviderede Excel-ark (ligger der flere
    i `Output`, vælges arket i en dialog med det senest ændrede øverst), logger ind i STIL
    igen og gennemfører hver ændring, og viser til sidst et resultat. Godkend,
    venter og afvis sendes som statusændring (PUT) med kommentaren fra arket (tom
@@ -48,13 +48,13 @@ uv sync
 Første gang programmet startes (eller når `RUN_MODE` mangler i `.env`), vises en
 opsætningsdialog før hovedvinduet. Den går igennem:
 
-1. **Driftsform** – ATS eller Lokalt.
-2. **Automation Server** – URL, token og workqueue-ID (kun ved ATS).
-3. **Login** – IdP-organisationen der vælges på STIL's loginside, skrevet præcis
+1. **Driftsform** - ATS eller Lokalt.
+2. **Automation Server** - URL, token og workqueue-ID (kun ved ATS).
+3. **Login** - IdP-organisationen der vælges på STIL's loginside, skrevet præcis
    som i listen dér (fx `Aarhus Kommune, 55133018, Aarhus Kommune`).
-4. **Mappe til output** – gemmes som `BASE_DIR`; overblik og logs lægges i
+4. **Mappe til output** - gemmes som `BASE_DIR`; overblik og logs lægges i
    `<mappe>/Output`.
-5. **Genvej (valgfrit, kun Windows)** – opretter `Dataaftaler - STIL.lnk` til
+5. **Genvej (valgfrit, kun Windows)** - opretter `Dataaftaler - STIL.lnk` til
    `start-dataaftaler.bat` i den valgte mappe (standard: skrivebordet) med
    `app.ico` som ikon.
 
@@ -86,7 +86,7 @@ på skrivebordet.
 uv run python -m gui.app    # eller, efter `uv sync`:  uv run dataaftaler
 ```
 
-**Headless (samme faser, uden GUI – fx fra Automation Server):**
+**Headless (samme faser, uden GUI - fx fra Automation Server):**
 
 ```sh
 uv run python main.py --overview     # dan overblik (Excel)
@@ -136,9 +136,9 @@ genstarter via `Start Dataaftaler.bat`. Kører programmet fra et git-checkout
 | `helpers/updater.py` | Tjek for og installér nye versioner fra GitHub Releases. |
 | `packaging/` | Filer til release-zip'ens yderste mappe (launcher, LÆS MIG). |
 | `helpers/stil_api.py` | STIL login (Selenium) + REST-kald (requests). |
-| `helpers/reporting.py` | `ProgressReporter` (Null/Gui) + `StopRequested` – fælles fremdrift/afbrydelse. |
+| `helpers/reporting.py` | `ProgressReporter` (Null/Gui) + `StopRequested` - fælles fremdrift/afbrydelse. |
 | `helpers/config.py` | Konfiguration: endpoints, timeouts, status-mapping, stier. |
-| `processes/application_handler.py` | `startup()`/`close()` – login og delt auth-kontekst (`AppContext`). |
+| `processes/application_handler.py` | `startup()`/`close()` - login og delt auth-kontekst (`AppContext`). |
 | `processes/process_item.py` | Behandl ét kø-element (skift status / slet / spring over). |
 | `processes/queue_handler.py` | Læs Excel → kø-elementer; samtidig upload til kø. |
 | `processes/overview.py` | Dan overbliks-Excel med dropdown. |
