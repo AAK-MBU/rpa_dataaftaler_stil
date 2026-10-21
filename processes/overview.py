@@ -158,8 +158,8 @@ def store_overview(agreements_df: pd.DataFrame) -> str:
             if status_cell.value != "SLETTET":
                 options = ",".join(config.EXCEL_CHANGE_OPTIONS)
                 dv = DataValidation(type="list", formula1=f'"{options}"')
-                dv.error_title = "Ugyldigt input"
-                dv.error_message = "Vælg venligst en værdi fra rullelisten"
+                dv.errorTitle = "Ugyldigt input"
+                dv.error = "Vælg venligst en værdi fra rullelisten"
                 worksheet.add_data_validation(dv)
                 dv.add(statusaendring_cell)
 
