@@ -11,7 +11,7 @@ med et dobbeltklik.
 - Git installeret (bruges til at hente en af programmets afhængigheder).
 - Internetadgang (første kørsel henter værktøjer og `chromedriver`).
 
-`uv` (Python-værktøjet) installeres automatisk af launcheren første gang – det
+`uv` (Python-værktøjet) installeres automatisk af launcheren første gang - det
 skal ikke installeres manuelt.
 
 ## Opsætning (en gang pr. maskine)
@@ -67,16 +67,16 @@ Dobbeltklik **`Start Dataaftaler.bat`** (eller genvejen).
 
 ### Arbejdsgang i programmet
 
-1. **Dan overblik (Excel)** – programmet gemmer overbliks-arket i mappen
+1. **Dan overblik (Excel)** - programmet gemmer overbliks-arket i mappen
    `Output` i den mappe, der er valgt under Opsætning. Den fulde sti
    vises i historikken (*"Overblik gemt: …"*).
 2. Åbn arket (knappen **Åbn regneark** eller direkte i `Output`-mappen), vælg
    `GODKEND` / `VENT` / `AFVIS` / `SLET` i kolonnen `statusændring`, skriv evt.
    en kommentar i kolonnen `kommentar` lige til højre (bruges ikke ved `SLET`),
    og **gem filen samme
-   sted** (overskriv – lad være med at omdøbe eller flytte den, og slet ikke
+   sted** (overskriv - lad være med at omdøbe eller flytte den, og slet ikke
    kolonner).
-3. **Indlæs ændringer & kør** – programmet læser det reviderede ark fra netop
+3. **Indlæs ændringer & kør** - programmet læser det reviderede ark fra netop
    `Output`-mappen (stien vises også i historikken) og gennemfører ændringerne.
    Ligger der flere ark i mappen, vælger du arket i en dialog.
    *I denne version er knappen slået fra, indtil opdatering og sletning af
@@ -105,6 +105,6 @@ uv run dataaftaler
 ## Sikkerhed: `.env`
 
 `.env` indeholder `ATS_TOKEN` (en hemmelighed), når driftsformen er ATS. Send den
-**ikke** på mail – udfyld den lokalt på maskinen via opsætningsdialogen.
+**ikke** på mail - udfyld den lokalt på maskinen via opsætningsdialogen.
 `BASE_DIR` styrer hvor `Output/` (overblik + logs) lægges; peg den evt.
 mod en synkroniseret/delt mappe.

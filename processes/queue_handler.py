@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Columns the reviewed overview must still contain for the queue to be built.
 # The caseworker edits the sheet by hand, so a deleted/renamed column is a real
-# risk – we validate up front and tell them exactly what is missing.
+# risk - we validate up front and tell them exactly what is missing.
 REQUIRED_COLUMNS = ("Instregnr", "status", "statusændring", "systemNavn", "serviceNavn")
 
 # Valgfri fritekst-kolonne; mangler den (ældre ark), sendes en tom kommentar.

@@ -2,12 +2,12 @@
 
 Dialogen går trinvis gennem:
 
-1. **Driftsform** – ATS (arbejdskø i Automation Server) eller lokalt (ingen kø).
-2. **Automation Server** – URL, token og workqueue-ID (kun ved ATS).
-3. **Login** – IdP-organisationen der vælges på STIL's loginside
+1. **Driftsform** - ATS (arbejdskø i Automation Server) eller lokalt (ingen kø).
+2. **Automation Server** - URL, token og workqueue-ID (kun ved ATS).
+3. **Login** - IdP-organisationen der vælges på STIL's loginside
    (``LOGIN_ORGANISATION``).
-4. **Output-mappe** – ``BASE_DIR``; overblik og logs lægges i ``<mappe>/Output``.
-5. **Genvej** – valgfri genvej til ``start-dataaftaler.bat`` med ``app.ico`` som ikon.
+4. **Output-mappe** - ``BASE_DIR``; overblik og logs lægges i ``<mappe>/Output``.
+5. **Genvej** - valgfri genvej til ``start-dataaftaler.bat`` med ``app.ico`` som ikon.
 
 Værdierne gemmes med :func:`helpers.settings.save_settings`, når brugeren
 trykker "Gem".
@@ -33,7 +33,7 @@ class SetupWizard(tk.Toplevel):
 
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
-        self.title("Opsætning – Dataaftaler")
+        self.title("Opsætning - Dataaftaler")
         self.geometry("520x360")
         self.resizable(False, False)
         self.completed = False

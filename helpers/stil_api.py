@@ -194,7 +194,7 @@ def open_stil_connection(reporter: ProgressReporter | None = None) -> webdriver.
         ) from e
     logger.info("Login gennemført. Fortsætter...")
 
-    # Login done – get the browser out of the way and bring the GUI back up.
+    # Login done - get the browser out of the way and bring the GUI back up.
     with contextlib.suppress(Exception):
         browser.minimize_window()
     if reporter is not None:

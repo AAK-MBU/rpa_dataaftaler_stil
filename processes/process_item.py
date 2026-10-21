@@ -38,7 +38,7 @@ def process_item(
 
     app = get_app()
     if app is None:
-        raise ProcessError("Application not started – call startup() first.")
+        raise ProcessError("Application not started - call startup() first.")
 
     org_num = item_data["Instregnr"]
     system_name = item_data["systemNavn"]
@@ -62,7 +62,7 @@ def process_item(
     agreement = agreements.get(f"{system_name}_{service_name}_{current_status}")
 
     if agreement is None:
-        # Maybe it is already in the wanted status – then there is nothing to do.
+        # Maybe it is already in the wanted status - then there is nothing to do.
         already_ok = agreements.get(f"{system_name}_{service_name}_{wanted_status}")
         if already_ok is not None:
             reporter.log(
@@ -117,7 +117,7 @@ def verify_change(
 
     if refreshed is None:
         if wanted_status == config.STATUS_DELETED:
-            logger.info("Aftale %s findes ikke længere i STIL – slettet.", aftale_id)
+            logger.info("Aftale %s findes ikke længere i STIL - slettet.", aftale_id)
             return
         raise BusinessError(
             f"Aftale {aftale_id} for institution {org_num} blev ikke fundet ved "
