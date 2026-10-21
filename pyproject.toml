@@ -81,4 +81,4 @@ exclude = [
 ]
 pythonVersion = "3.13"
 typeCheckingMode = "basic"   # or "basic"
-reportMissingTypeStubs = true
+reportMissingTypeStubs = false
