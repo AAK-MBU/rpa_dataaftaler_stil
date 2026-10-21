@@ -163,3 +163,4 @@ cython_debug/
 
 # Dataaftaler runtime output (overviews + run logs)
 Output/
+lokal_test/
