@@ -64,7 +64,7 @@ LOGIN_PAGE_TIMEOUT = 60
 LOGIN_USER_TIMEOUT = 300  # how long we wait for the user to complete MitID login
 
 # Overview API throttling: pause after this many calls inside the time window
-THROTTLE_AFTER_CALLS = 200
+THROTTLE_AFTER_CALLS = 1200
 THROTTLE_WINDOW_SECONDS = 60
 THROTTLE_PAUSE_SECONDS = 30
 
