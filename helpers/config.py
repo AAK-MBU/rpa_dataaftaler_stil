@@ -183,4 +183,4 @@ GUI_POLL_MS = 100  # how often the Tkinter loop drains the worker event queue
 
 # "Indlæs ændringer & kør" (statusændring og sletning via PUT/DELETE) er slået
 # fra i GUI'et, indtil de kald er testet mod STIL. Kun "Dan overblik" er testet.
-APPLY_CHANGES_ENABLED = False
+APPLY_CHANGES_ENABLED = True
