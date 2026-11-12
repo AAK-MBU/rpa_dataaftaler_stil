@@ -19,6 +19,7 @@ import logging
 import sys
 from pathlib import Path
 
+import truststore
 from automation_server_client import AutomationServer, Workqueue
 from mbu_rpa_core.exceptions import BusinessError, ProcessError
 from mbu_rpa_core.process_states import CompletedState
@@ -243,6 +244,7 @@ def run_local(
 
 
 if __name__ == "__main__":
+    truststore.inject_into_ssl()
     ats_functions.init_logger()
     reporter = NullReporter()
 

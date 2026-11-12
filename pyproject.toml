@@ -15,6 +15,7 @@ dependencies = [
     "openpyxl",
     "requests",
     "python-dotenv",
+    "truststore>=0.10.5",
 ]
 
 [project.scripts]
