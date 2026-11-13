@@ -54,12 +54,15 @@ def get_workqueue_items(workqueue: Workqueue, return_data=False):
 def count_new_items(workqueue: Workqueue) -> int:
     """Returnér antallet af elementer med status ``new`` i arbejdskøen.
 
-    Bruger Automation Servers ``GET /workqueues/{id}/information``, der tæller
-    elementer pr. status uden at tage nogen af dem fra køen.
+    Bruger Automation Servers ``GET /workqueues/information``, der returnerer en
+    liste med én dict pr. arbejdskø (nøgler bl.a. ``id``, ``new``,
+    ``in_progress``, ``completed``, ``failed``, ``pending_user_action``).
+    Antallet tælles uden at tage nogen elementer fra køen.
 
     Raises:
         OSError: Hvis ``ATS_URL`` eller ``ATS_TOKEN`` mangler i miljøet.
         requests.HTTPError: Hvis API-kaldet fejler.
+        LookupError: Hvis arbejdskøen ikke findes i svaret.
     """
     load_dotenv()
 
@@ -70,12 +73,17 @@ def count_new_items(workqueue: Workqueue) -> int:
         raise OSError("ATS_URL or ATS_TOKEN is not set in the environment")
 
     response = requests.get(
-        f"{url}/workqueues/{workqueue.id}/information",
+        f"{url}/workqueues/information",
         headers={"Authorization": f"Bearer {token}"},
         timeout=60,
     )
     response.raise_for_status()
-    return int(response.json()["new"])
+
+    for info in response.json():
+        if info.get("id") == workqueue.id:
+            return int(info["new"])
+
+    raise LookupError(f"Arbejdskø {workqueue.id} findes ikke i /workqueues/information")
 
 
 def get_item_info(item: WorkItem):
