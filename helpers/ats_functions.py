@@ -51,6 +51,33 @@ def get_workqueue_items(workqueue: Workqueue, return_data=False):
     return workqueue_items
 
 
+def count_new_items(workqueue: Workqueue) -> int:
+    """Returnér antallet af elementer med status ``new`` i arbejdskøen.
+
+    Bruger Automation Servers ``GET /workqueues/{id}/information``, der tæller
+    elementer pr. status uden at tage nogen af dem fra køen.
+
+    Raises:
+        OSError: Hvis ``ATS_URL`` eller ``ATS_TOKEN`` mangler i miljøet.
+        requests.HTTPError: Hvis API-kaldet fejler.
+    """
+    load_dotenv()
+
+    url = os.getenv("ATS_URL")
+    token = os.getenv("ATS_TOKEN")
+
+    if not url or not token:
+        raise OSError("ATS_URL or ATS_TOKEN is not set in the environment")
+
+    response = requests.get(
+        f"{url}/workqueues/{workqueue.id}/information",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    response.raise_for_status()
+    return int(response.json()["new"])
+
+
 def get_item_info(item: WorkItem):
     """Unpack item"""
     return item.data["item"]["data"], item.data["item"]["reference"]

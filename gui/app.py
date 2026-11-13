@@ -34,6 +34,7 @@ from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
 from zoneinfo import ZoneInfo
 
+import truststore
 from automation_server_client import AutomationServer
 from dotenv import load_dotenv
 from PIL import Image, ImageTk
@@ -604,6 +605,9 @@ def _signal_ready() -> None:
 
 def main() -> None:
     """Launch the desktop application."""
+    # Brug Windows' certifikatlager (inkl. kommunens interne CA) til HTTPS-kald,
+    # så Automation Server-API'et kan verificeres.
+    truststore.inject_into_ssl()
     # Load .env before anything reads config (BASE_DIR drives the Output/log dirs).
     load_dotenv(config.ENV_PATH)
     root = tk.Tk()
