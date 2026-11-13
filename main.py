@@ -93,6 +93,11 @@ async def process_workqueue(
 
     error_count = 0
 
+    if ats_functions.count_new_items(workqueue) == 0:
+        logger.info("Arbejdskøen er tom.")
+        reporter.log("Arbejdskøen er tom - der er intet at behandle.")
+        return
+
     try:
         startup(reporter)
         while error_count < config.MAX_RETRY:
