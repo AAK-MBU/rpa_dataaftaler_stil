@@ -1,6 +1,6 @@
 [project]
 name = "rpa-dataaftaler-stil"
-version = "1.1.0"
+version = "1.1.1"
 description = "Desktop RPA-løsning til at danne overblik over og opdatere dataaftaler i STIL, bygget på ATS-frameworket med et Tkinter-feedbackvindue."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -15,6 +15,7 @@ dependencies = [
     "openpyxl",
     "requests",
     "python-dotenv",
+    "truststore>=0.10.5",
 ]
 
 [project.scripts]
