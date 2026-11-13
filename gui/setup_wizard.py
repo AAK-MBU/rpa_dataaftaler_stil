@@ -47,7 +47,7 @@ class SetupWizard(tk.Toplevel):
         self.base_dir_var = tk.StringVar(
             value=current["BASE_DIR"] or str(config.get_base_dir())
         )
-        self.shortcut_var = tk.BooleanVar(value=settings.shortcuts_supported())
+        self.shortcut_var = tk.BooleanVar(value=False)
         self.shortcut_dir_var = tk.StringVar(value=str(settings.default_shortcut_dir()))
 
         self.body = ttk.Frame(self, padding=10)
